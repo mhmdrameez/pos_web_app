@@ -29,6 +29,12 @@ describe('receipt printing', () => {
     expect(text).toContain('Rs.1,050.00')
   })
 
+  it('does not print the temporary preview invoice number', () => {
+    const preview = { ...sale, invoiceNumber: 'PREVIEW' }
+
+    expect(generateReceiptText(generateReceiptData(preview, 'Quick Sale'))).not.toContain('PREVIEW')
+  })
+
   it('selects the standard printer font and avoids UTF-8 multi-byte output', () => {
     const bytes = new EscPosEncoder().text('Rs.500.00 * 2').encode()
 

@@ -82,7 +82,7 @@ export function generateReceiptText(data: ReceiptData, paperWidth: 58 | 80 = 58)
   }
 
   lines.push(center(data.businessName))
-  lines.push(center(data.invoiceNumber))
+  if (data.invoiceNumber !== 'PREVIEW') lines.push(center(data.invoiceNumber))
   lines.push(center(data.date))
   lines.push('')
 

@@ -67,7 +67,7 @@ export class PrinterService {
 
     encoder.align('center').bold(true).size(1, 2).text(data.businessName).newline().bold(false).size()
 
-    encoder.align('center').text(data.invoiceNumber).newline()
+    if (data.invoiceNumber !== 'PREVIEW') encoder.align('center').text(data.invoiceNumber).newline()
     encoder.text(data.date).newline(2)
 
     if (data.customer) {
@@ -100,7 +100,7 @@ export class PrinterService {
     if (data.amountPaid) encoder.newline().text(`Paid: ${data.amountPaid}`)
     if (data.change) encoder.newline().text(`Change: ${data.change}`)
 
-    encoder.newline().align('center').text('Thank you!').newline().cut()
+    encoder.newline().align('center').text('Thank you!').newline(3).cut()
 
     return encoder.encode()
   }
