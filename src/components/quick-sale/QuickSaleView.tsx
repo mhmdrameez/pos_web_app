@@ -1,4 +1,4 @@
-import { Menu, X } from 'lucide-react'
+import { Menu, Printer, X } from 'lucide-react'
 import { AmountDisplay } from './AmountDisplay'
 import { NumericKeypad } from './NumericKeypad'
 import { OrderPanel } from './OrderPanel'
@@ -9,6 +9,7 @@ export function QuickSaleView() {
   const isCartDrawerOpen = useAppStore((s) => s.isCartDrawerOpen)
   const toggleCartDrawer = useAppStore((s) => s.toggleCartDrawer)
   const setCartDrawerOpen = useAppStore((s) => s.setCartDrawerOpen)
+  const openPrinterSettings = useAppStore((s) => s.openPrinterSettings)
 
   useKeyboardShortcuts()
 
@@ -17,12 +18,30 @@ export function QuickSaleView() {
       <div className="flex-1 flex flex-col p-3 lg:p-4 min-w-0">
         <div className="flex items-center justify-between mb-4 md:hidden">
           <h2 className="text-lg font-semibold">Quick Sale</h2>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={openPrinterSettings}
+              className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-primary"
+              aria-label="Printer settings"
+            >
+              <Printer className="w-5 h-5" />
+            </button>
+            <button
+              onClick={toggleCartDrawer}
+              className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200"
+              aria-label="Toggle cart"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+        <div className="hidden md:flex justify-end mb-2">
           <button
-            onClick={toggleCartDrawer}
-            className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200"
-            aria-label="Toggle cart"
+            onClick={openPrinterSettings}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm font-medium text-primary hover:bg-gray-50"
           >
-            <Menu className="w-5 h-5" />
+            <Printer className="w-4 h-4" />
+            Printer
           </button>
         </div>
         <AmountDisplay />
