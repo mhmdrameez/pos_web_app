@@ -51,15 +51,14 @@ export function NumericKeypad() {
       {digitBtn('1')}
       {digitBtn('2')}
       {digitBtn('3')}
+      {digitBtn('*')}
 
       {digitBtn('0')}
       {digitBtn('00')}
       {digitBtn('.')}
-      {digitBtn('*')}
-
       <button
         onClick={handleAddItem}
-        className="col-span-4 h-16 bg-primary text-white rounded-lg text-lg font-semibold hover:bg-primary-hover active:bg-primary-hover shadow-sm"
+        className="h-16 bg-primary text-white rounded-lg text-base font-semibold hover:bg-primary-hover active:bg-primary-hover shadow-sm"
       >
         Add Item
       </button>
