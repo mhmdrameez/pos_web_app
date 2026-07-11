@@ -22,7 +22,6 @@ export interface ReceiptData {
     lineTotal: string
   }[]
   subtotal: string
-  tax: string
   discount: string
   hasDiscount: boolean
   grandTotal: string
@@ -59,7 +58,6 @@ export function generateReceiptData(
       lineTotal: formatReceiptAmount(item.unitPricePaise * item.quantity),
     })),
     subtotal: formatReceiptAmount(sale.subtotalPaise),
-    tax: formatReceiptAmount(sale.taxPaise),
     discount: formatReceiptAmount(sale.discountPaise),
     hasDiscount: sale.discountPaise > 0,
     grandTotal: formatReceiptAmount(sale.grandTotalPaise),

@@ -18,9 +18,8 @@ describe('database persistence', () => {
         { id: 'item-1', name: 'Item 1', unitPricePaise: 10000, quantity: 1 },
       ],
       subtotalPaise: 10000,
-      taxPaise: 500,
       discountPaise: 0,
-      grandTotalPaise: 10500,
+      grandTotalPaise: 10000,
       status: 'draft',
     }
 

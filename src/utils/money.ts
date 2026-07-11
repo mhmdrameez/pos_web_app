@@ -86,16 +86,8 @@ export function calculateSubtotal(items: { unitPricePaise: number; quantity: num
   return items.reduce((sum, item) => sum + calculateLineTotal(item.unitPricePaise, item.quantity), 0)
 }
 
-export function calculateTax(subtotalPaise: number, taxRatePercent: number): number {
-  return Math.round((subtotalPaise * taxRatePercent) / 100)
-}
-
-export function calculateGrandTotal(
-  subtotalPaise: number,
-  taxPaise: number,
-  discountPaise: number,
-): number {
-  return Math.max(0, subtotalPaise + taxPaise - discountPaise)
+export function calculateGrandTotal(subtotalPaise: number, discountPaise: number): number {
+  return Math.max(0, subtotalPaise - discountPaise)
 }
 
 export function calculateChange(amountPaidPaise: number, grandTotalPaise: number): number {

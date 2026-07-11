@@ -23,7 +23,6 @@ export interface SavedOrder {
   customer?: Customer
   items: CartItem[]
   subtotalPaise: number
-  taxPaise: number
   discountPaise: number
   grandTotalPaise: number
   status: OrderStatus
@@ -39,7 +38,6 @@ export interface CompletedSale extends SavedOrder {
 
 export interface AppSettings {
   businessName: string
-  taxRatePercent: number
 }
 
 export interface PrinterSettings {

@@ -25,10 +25,6 @@ export const appSettingsSchema = z.object({
     .string()
     .min(1, 'Business name is required')
     .max(100, 'Business name must be under 100 characters'),
-  taxRatePercent: z
-    .number()
-    .min(0, 'Tax rate cannot be negative')
-    .max(100, 'Tax rate cannot exceed 100%'),
 })
 
 export type AppSettingsFormData = z.infer<typeof appSettingsSchema>

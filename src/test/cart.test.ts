@@ -4,7 +4,6 @@ import { useCartStore } from '../stores/useCartStore'
 describe('useCartStore', () => {
   beforeEach(() => {
     useCartStore.getState().clearCart()
-    useCartStore.getState().setTaxRatePercent(5)
   })
 
   describe('amount entry', () => {
@@ -117,19 +116,12 @@ describe('useCartStore', () => {
       expect(useCartStore.getState().getSubtotalPaise()).toBe(15000)
     })
 
-    it('calculates tax at 5%', () => {
-      useCartStore.getState().setCurrentAmount('100')
-      useCartStore.getState().addItem()
-      expect(useCartStore.getState().getTaxPaise()).toBe(500)
-    })
-
     it('calculates grand total with discount', () => {
       useCartStore.getState().setCurrentAmount('100')
       useCartStore.getState().addItem()
       useCartStore.getState().setDiscountPaise(200)
       const subtotal = useCartStore.getState().getSubtotalPaise()
-      const tax = useCartStore.getState().getTaxPaise()
-      expect(useCartStore.getState().getGrandTotalPaise()).toBe(subtotal + tax - 200)
+      expect(useCartStore.getState().getGrandTotalPaise()).toBe(subtotal - 200)
     })
 
     it('counts items', () => {

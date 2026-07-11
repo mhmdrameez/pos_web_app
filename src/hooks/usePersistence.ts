@@ -9,7 +9,6 @@ import { printerService } from '../services/printer/PrinterService'
 export function usePersistence() {
   const setDbReady = useAppStore((s) => s.setDbReady)
   const setBusinessName = useAppStore((s) => s.setBusinessName)
-  const setAppTaxRate = useAppStore((s) => s.setTaxRatePercent)
   const addToast = useAppStore((s) => s.addToast)
   const loadPrinterSettings = usePrinterStore((s) => s.loadSettings)
 
@@ -26,8 +25,6 @@ export function usePersistence() {
         if (!mounted) return
 
         setBusinessName(settings.businessName)
-        setAppTaxRate(settings.taxRatePercent)
-        useCartStore.getState().setTaxRatePercent(settings.taxRatePercent)
         useCartStore.getState().loadCart({
           items: cart.items,
           customer: cart.customer,
@@ -60,7 +57,7 @@ export function usePersistence() {
     return () => {
       mounted = false
     }
-  }, [setDbReady, setBusinessName, setAppTaxRate, addToast, loadPrinterSettings])
+  }, [setDbReady, setBusinessName, addToast, loadPrinterSettings])
 
   useEffect(() => {
     const isReady = useAppStore.getState().isDbReady

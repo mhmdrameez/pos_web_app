@@ -9,7 +9,6 @@ import type {
 
 const DEFAULT_SETTINGS: AppSettings = {
   businessName: 'My Business',
-  taxRatePercent: 5,
 }
 
 const DEFAULT_PRINTER: PrinterSettings = {

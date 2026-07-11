@@ -36,7 +36,6 @@ export function useCheckout() {
       const invoiceNumber = await getNextInvoiceNumber()
       const now = Date.now()
       const subtotalPaise = cart.getSubtotalPaise()
-      const taxPaise = cart.getTaxPaise()
       const discountPaise = cart.discountPaise
       const grandTotalPaise = cart.getGrandTotalPaise()
 
@@ -50,7 +49,6 @@ export function useCheckout() {
         customer: cart.customer ?? undefined,
         items: [...items],
         subtotalPaise,
-        taxPaise,
         discountPaise,
         grandTotalPaise,
         status: 'completed',
@@ -111,7 +109,6 @@ export function useCheckout() {
         customer: cart.customer ?? undefined,
         items: [...items],
         subtotalPaise: cart.getSubtotalPaise(),
-        taxPaise: cart.getTaxPaise(),
         discountPaise: cart.discountPaise,
         grandTotalPaise: cart.getGrandTotalPaise(),
         status: 'draft',

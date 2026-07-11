@@ -19,7 +19,6 @@ interface AppState {
   toasts: ToastMessage[]
   isDbReady: boolean
   businessName: string
-  taxRatePercent: number
 
   setActiveSidebarView: (view: SidebarView) => void
   setActiveBottomTab: (tab: BottomTab) => void
@@ -39,7 +38,6 @@ interface AppState {
   removeToast: (id: string) => void
   setDbReady: (ready: boolean) => void
   setBusinessName: (name: string) => void
-  setTaxRatePercent: (rate: number) => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -59,7 +57,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   toasts: [],
   isDbReady: false,
   businessName: 'My Business',
-  taxRatePercent: 5,
 
   setActiveSidebarView: (view) => {
     set({ activeSidebarView: view })
@@ -101,5 +98,4 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setDbReady: (ready) => set({ isDbReady: ready }),
   setBusinessName: (name) => set({ businessName: name }),
-  setTaxRatePercent: (rate) => set({ taxRatePercent: rate }),
 }))

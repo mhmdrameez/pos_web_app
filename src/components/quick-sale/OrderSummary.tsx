@@ -4,7 +4,6 @@ import { formatRupees } from '../../utils/money'
 export function OrderSummary() {
   const itemCount = useCartStore((s) => s.getItemCount())
   const subtotal = useCartStore((s) => s.getSubtotalPaise())
-  const tax = useCartStore((s) => s.getTaxPaise())
   const discount = useCartStore((s) => s.discountPaise)
   const grandTotal = useCartStore((s) => s.getGrandTotalPaise())
 
@@ -13,10 +12,6 @@ export function OrderSummary() {
       <div className="flex justify-between text-sm text-gray-600">
         <span>Items ({itemCount})</span>
         <span className="tabular-nums">{formatRupees(subtotal)}</span>
-      </div>
-      <div className="flex justify-between text-sm text-gray-600">
-        <span>Tax</span>
-        <span className="tabular-nums">{formatRupees(tax)}</span>
       </div>
       <div className="flex justify-between text-sm text-gray-600">
         <span>Discount</span>

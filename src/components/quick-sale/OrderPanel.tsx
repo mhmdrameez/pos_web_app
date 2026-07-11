@@ -44,7 +44,6 @@ export function OrderPanel({ className = '' }: OrderPanelProps) {
       customer: customer ?? undefined,
       items: [...items],
       subtotalPaise: cart.getSubtotalPaise(),
-      taxPaise: cart.getTaxPaise(),
       discountPaise: cart.discountPaise,
       grandTotalPaise: grandTotal,
       status: 'draft' as const,

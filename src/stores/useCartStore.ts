@@ -3,7 +3,6 @@ import type { CartItem, Customer } from '../types'
 import {
   calculateGrandTotal,
   calculateSubtotal,
-  calculateTax,
   parseAmountAndQuantity,
   parseAmountInput,
 } from '../utils/money'
@@ -14,10 +13,8 @@ interface CartState {
   currentAmount: string
   customer: Customer | null
   discountPaise: number
-  taxRatePercent: number
   nextItemNumber: number
 
-  setTaxRatePercent: (rate: number) => void
   setCurrentAmount: (amount: string) => void
   appendToAmount: (input: string) => void
   backspaceAmount: () => void
@@ -43,7 +40,6 @@ interface CartState {
   }
 
   getSubtotalPaise: () => number
-  getTaxPaise: () => number
   getGrandTotalPaise: () => number
   getItemCount: () => number
 }
@@ -53,10 +49,7 @@ export const useCartStore = create<CartState>((set, get) => ({
   currentAmount: '',
   customer: null,
   discountPaise: 0,
-  taxRatePercent: 5,
   nextItemNumber: 1,
-
-  setTaxRatePercent: (rate) => set({ taxRatePercent: rate }),
 
   setCurrentAmount: (amount) => set({ currentAmount: amount }),
 
@@ -157,15 +150,9 @@ export const useCartStore = create<CartState>((set, get) => ({
 
   getSubtotalPaise: () => calculateSubtotal(get().items),
 
-  getTaxPaise: () => {
-    const subtotal = get().getSubtotalPaise()
-    return calculateTax(subtotal, get().taxRatePercent)
-  },
-
   getGrandTotalPaise: () => {
     const subtotal = get().getSubtotalPaise()
-    const tax = get().getTaxPaise()
-    return calculateGrandTotal(subtotal, tax, get().discountPaise)
+    return calculateGrandTotal(subtotal, get().discountPaise)
   },
 
   getItemCount: () => get().items.reduce((sum, item) => sum + item.quantity, 0),

@@ -13,9 +13,8 @@ const sale: CompletedSale = {
   status: 'completed',
   items: [{ id: 'item-1', name: 'Tea', unitPricePaise: 50000, quantity: 2 }],
   subtotalPaise: 100000,
-  taxPaise: 5000,
   discountPaise: 0,
-  grandTotalPaise: 105000,
+  grandTotalPaise: 100000,
   paymentMethod: 'cash',
 }
 
@@ -26,7 +25,7 @@ describe('receipt printing', () => {
     expect(text).toContain('Tea')
     expect(text).toContain('Rs.1,000.00')
     expect(text).toContain('TOTAL')
-    expect(text).toContain('Rs.1,050.00')
+    expect(text).toContain('Rs.1,000.00')
     expect(text).not.toContain('Subtotal')
   })
 

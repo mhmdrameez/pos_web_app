@@ -3,7 +3,6 @@ import {
   parseAmountInput,
   amountStringToPaise,
   calculateSubtotal,
-  calculateTax,
   calculateGrandTotal,
   calculateChange,
   formatRupees,
@@ -60,14 +59,9 @@ describe('money utilities', () => {
       expect(calculateSubtotal(items)).toBe(30099)
     })
 
-    it('calculates tax', () => {
-      expect(calculateTax(10000, 5)).toBe(500)
-      expect(calculateTax(999, 5)).toBe(50)
-    })
-
     it('calculates grand total with discount', () => {
-      expect(calculateGrandTotal(10000, 500, 200)).toBe(10300)
-      expect(calculateGrandTotal(1000, 50, 2000)).toBe(0)
+      expect(calculateGrandTotal(10000, 200)).toBe(9800)
+      expect(calculateGrandTotal(1000, 2000)).toBe(0)
     })
 
     it('calculates change', () => {
