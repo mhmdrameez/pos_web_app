@@ -13,13 +13,20 @@ export class EscPosEncoder {
 
   private init(): this {
     this.buffer.push(ESC, 0x40)
+    this.font('a')
     return this
   }
 
   text(content: string): this {
-    const encoder = new TextEncoder()
-    const bytes = encoder.encode(content)
-    this.buffer.push(...bytes)
+    for (const char of content) {
+      const code = char.charCodeAt(0)
+      this.buffer.push(code >= 0x20 && code <= 0x7e ? code : 0x3f)
+    }
+    return this
+  }
+
+  font(value: 'a' | 'b' = 'a'): this {
+    this.buffer.push(ESC, 0x4d, value === 'a' ? 0 : 1)
     return this
   }
 

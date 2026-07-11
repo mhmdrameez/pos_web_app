@@ -1,5 +1,10 @@
 import type { CompletedSale } from '../../types'
-import { formatRupees } from '../../utils/money'
+function formatReceiptAmount(paise: number): string {
+  return `Rs.${(paise / 100).toLocaleString('en-IN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
+}
 
 export interface ReceiptData {
   businessName: string
@@ -19,6 +24,7 @@ export interface ReceiptData {
   subtotal: string
   tax: string
   discount: string
+  hasDiscount: boolean
   grandTotal: string
   paymentMethod: string
   amountPaid?: string
@@ -49,16 +55,17 @@ export function generateReceiptData(
     items: sale.items.map((item) => ({
       name: item.name,
       quantity: item.quantity,
-      unitPrice: formatRupees(item.unitPricePaise),
-      lineTotal: formatRupees(item.unitPricePaise * item.quantity),
+      unitPrice: formatReceiptAmount(item.unitPricePaise),
+      lineTotal: formatReceiptAmount(item.unitPricePaise * item.quantity),
     })),
-    subtotal: formatRupees(sale.subtotalPaise),
-    tax: formatRupees(sale.taxPaise),
-    discount: formatRupees(sale.discountPaise),
-    grandTotal: formatRupees(sale.grandTotalPaise),
+    subtotal: formatReceiptAmount(sale.subtotalPaise),
+    tax: formatReceiptAmount(sale.taxPaise),
+    discount: formatReceiptAmount(sale.discountPaise),
+    hasDiscount: sale.discountPaise > 0,
+    grandTotal: formatReceiptAmount(sale.grandTotalPaise),
     paymentMethod: paymentLabels[sale.paymentMethod] ?? sale.paymentMethod,
-    amountPaid: sale.amountPaidPaise ? formatRupees(sale.amountPaidPaise) : undefined,
-    change: sale.changePaise ? formatRupees(sale.changePaise) : undefined,
+    amountPaid: sale.amountPaidPaise ? formatReceiptAmount(sale.amountPaidPaise) : undefined,
+    change: sale.changePaise ? formatReceiptAmount(sale.changePaise) : undefined,
   }
 }
 
@@ -90,12 +97,12 @@ export function generateReceiptText(data: ReceiptData, paperWidth: 58 | 80 = 58)
   lines.push('-'.repeat(width))
   for (const item of data.items) {
     lines.push(item.name)
-    lines.push(row(`${item.quantity} x ${item.unitPrice}`, item.lineTotal))
+    lines.push(row(`${item.unitPrice} * ${item.quantity}`, item.lineTotal))
   }
   lines.push('-'.repeat(width))
   lines.push(row('Subtotal', data.subtotal))
   lines.push(row('Tax', data.tax))
-  if (data.discount !== '₹0.00') lines.push(row('Discount', `-${data.discount}`))
+  if (data.hasDiscount) lines.push(row('Discount', `-${data.discount}`))
   lines.push(row('TOTAL', data.grandTotal))
   lines.push('')
   lines.push(`Payment: ${data.paymentMethod}`)

@@ -82,7 +82,7 @@ export class PrinterService {
     for (const item of data.items) {
       encoder.text(item.name).newline()
       encoder.tableRow(
-        `${item.quantity} x ${item.unitPrice}`,
+        `${item.unitPrice} * ${item.quantity}`,
         item.lineTotal,
       )
     }
@@ -90,7 +90,7 @@ export class PrinterService {
 
     encoder.tableRow('Subtotal', data.subtotal)
     encoder.tableRow(`Tax`, data.tax)
-    if (data.discount !== '₹0.00') {
+    if (data.hasDiscount) {
       encoder.tableRow('Discount', `-${data.discount}`)
     }
     encoder.bold(true).tableRow('TOTAL', data.grandTotal).bold(false)
