@@ -12,6 +12,7 @@ interface OrderItemRowProps {
 
 export function OrderItemRow({ id, name, unitPricePaise, quantity }: OrderItemRowProps) {
   const updateQuantity = useCartStore((s) => s.updateQuantity)
+  const updateItemName = useCartStore((s) => s.updateItemName)
   const removeItem = useCartStore((s) => s.removeItem)
   const showConfirm = useAppStore((s) => s.showConfirm)
 
@@ -25,7 +26,12 @@ export function OrderItemRow({ id, name, unitPricePaise, quantity }: OrderItemRo
   return (
     <div className="flex items-center gap-2 py-3 border-b border-gray-100 last:border-0">
       <div className="flex-1 min-w-0">
-        <p className="font-medium text-gray-900 truncate">{name}</p>
+        <input
+          defaultValue={name}
+          onBlur={(event) => updateItemName(id, event.target.value)}
+          className="w-full bg-transparent font-medium text-gray-900 outline-none focus:ring-2 focus:ring-primary/30 rounded px-1 -ml-1"
+          aria-label="Item name"
+        />
         <p className="text-sm text-gray-500">{formatRupees(unitPricePaise)} each</p>
       </div>
       <div className="flex items-center gap-1">

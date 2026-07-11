@@ -39,6 +39,25 @@ describe('useCartStore', () => {
       expect(result).toBe(false)
       expect(useCartStore.getState().items).toHaveLength(0)
     })
+
+    it('adds the entered multiplication quantity to the item', () => {
+      useCartStore.getState().setCurrentAmount('500*2')
+      useCartStore.getState().addItem()
+
+      const item = useCartStore.getState().items[0]
+      expect(item.name).toBe('Item 1')
+      expect(item.unitPricePaise).toBe(50000)
+      expect(item.quantity).toBe(2)
+    })
+
+    it('updates an item name', () => {
+      useCartStore.getState().setCurrentAmount('100')
+      useCartStore.getState().addItem()
+      const id = useCartStore.getState().items[0].id
+      useCartStore.getState().updateItemName(id, 'Milk')
+
+      expect(useCartStore.getState().items[0].name).toBe('Milk')
+    })
   })
 
   describe('multiple items', () => {

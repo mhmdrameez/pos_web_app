@@ -1,10 +1,10 @@
 import { create } from 'zustand'
 import type { CartItem, Customer } from '../types'
 import {
-  amountStringToPaise,
   calculateGrandTotal,
   calculateSubtotal,
   calculateTax,
+  parseAmountAndQuantity,
   parseAmountInput,
 } from '../utils/money'
 import { generateId } from '../utils/id'
@@ -24,6 +24,7 @@ interface CartState {
   clearAmount: () => void
   addItem: () => boolean
   updateQuantity: (id: string, delta: number) => 'removed' | 'updated' | 'confirm-remove'
+  updateItemName: (id: string, name: string) => void
   removeItem: (id: string) => void
   setCustomer: (customer: Customer | null) => void
   setDiscountPaise: (paise: number) => void
@@ -73,14 +74,14 @@ export const useCartStore = create<CartState>((set, get) => ({
 
   addItem: () => {
     const { currentAmount, items, nextItemNumber } = get()
-    const paise = amountStringToPaise(currentAmount)
-    if (paise <= 0) return false
+    const entry = parseAmountAndQuantity(currentAmount)
+    if (!entry) return false
 
     const newItem: CartItem = {
       id: generateId(),
       name: `Item ${nextItemNumber}`,
-      unitPricePaise: paise,
-      quantity: 1,
+      unitPricePaise: entry.unitPricePaise,
+      quantity: entry.quantity,
     }
 
     set({
@@ -103,6 +104,12 @@ export const useCartStore = create<CartState>((set, get) => ({
       items: items.map((i) => (i.id === id ? { ...i, quantity: newQty } : i)),
     })
     return 'updated'
+  },
+
+  updateItemName: (id, name) => {
+    const trimmedName = name.trim()
+    if (!trimmedName) return
+    set({ items: get().items.map((item) => (item.id === id ? { ...item, name: trimmedName } : item)) })
   },
 
   removeItem: (id) => {

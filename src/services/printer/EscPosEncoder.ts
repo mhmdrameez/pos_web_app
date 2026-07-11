@@ -65,7 +65,8 @@ export class EscPosEncoder {
   }
 
   cut(partial = false): this {
-    this.buffer.push(GS, 0x56, partial ? 1 : 0)
+    // GS V m n cuts without the printer adding its own extra paper feed.
+    this.buffer.push(GS, 0x56, partial ? 0x42 : 0x41, 0x00)
     return this
   }
 

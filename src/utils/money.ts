@@ -24,28 +24,52 @@ export function formatRupeesFromString(amount: string): string {
 }
 
 export function parseAmountInput(current: string, input: string): string {
+  if (input === '*') {
+    return current && !current.includes('*') ? `${current}*` : current
+  }
+
+  const [amount, quantity] = current.split('*')
+  const activePart = quantity === undefined ? amount : quantity
+
   if (input === '00') {
-    if (!current || current === '0') return '0'
-    if (current.includes('.')) return current
+    if (!activePart || activePart === '0') return current ? `${current}0` : '0'
+    if (activePart.includes('.')) return current
     return current + '00'
   }
 
   if (input === '.') {
-    if (current.includes('.')) return current
+    if (activePart.includes('.')) return current
     return current ? current + '.' : '0.'
   }
 
   const digit = input.replace(/\D/g, '')
   if (!digit) return current
 
-  if (current === '0' && !current.includes('.')) {
-    return digit
+  if (activePart === '0' && !activePart.includes('.')) {
+    if (quantity === undefined) return digit
+    return `${amount}*${digit}`
+  }
+
+  if (quantity !== undefined && activePart.length >= 3) {
+    return current
   }
 
   const next = current + digit
-  const parts = next.split('.')
+  const activeNext = next.split('*').at(-1) ?? ''
+  const parts = activeNext.split('.')
   if (parts.length === 2 && parts[1].length > 2) return current
   return next
+}
+
+export function parseAmountAndQuantity(input: string): { unitPricePaise: number; quantity: number } | null {
+  const [amount, quantityInput, ...extra] = input.split('*')
+  if (extra.length > 0 || !amount || quantityInput === '') return null
+
+  const unitPricePaise = amountStringToPaise(amount)
+  const quantity = quantityInput === undefined ? 1 : Number(quantityInput)
+  if (unitPricePaise <= 0 || !Number.isInteger(quantity) || quantity <= 0) return null
+
+  return { unitPricePaise, quantity }
 }
 
 export function amountStringToPaise(amount: string): number {

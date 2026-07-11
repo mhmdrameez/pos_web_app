@@ -55,7 +55,7 @@ export class PrinterService {
       .newline(2)
       .align('center')
       .text('Printer OK')
-      .newline(3)
+      .newline()
       .cut()
       .encode()
 
@@ -82,7 +82,7 @@ export class PrinterService {
     for (const item of data.items) {
       encoder.text(item.name).newline()
       encoder.tableRow(
-        `${item.unitPrice} * ${item.quantity}`,
+        'Item total',
         item.lineTotal,
       )
     }
@@ -100,7 +100,7 @@ export class PrinterService {
     if (data.amountPaid) encoder.newline().text(`Paid: ${data.amountPaid}`)
     if (data.change) encoder.newline().text(`Change: ${data.change}`)
 
-    encoder.newline(2).align('center').text('Thank you!').newline(3).cut()
+    encoder.newline().align('center').text('Thank you!').newline().cut()
 
     return encoder.encode()
   }

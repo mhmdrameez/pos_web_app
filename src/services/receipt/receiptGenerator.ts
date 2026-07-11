@@ -97,7 +97,7 @@ export function generateReceiptText(data: ReceiptData, paperWidth: 58 | 80 = 58)
   lines.push('-'.repeat(width))
   for (const item of data.items) {
     lines.push(item.name)
-    lines.push(row(`${item.unitPrice} * ${item.quantity}`, item.lineTotal))
+    lines.push(row('Item total', item.lineTotal))
   }
   lines.push('-'.repeat(width))
   lines.push(row('Subtotal', data.subtotal))

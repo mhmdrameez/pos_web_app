@@ -46,6 +46,12 @@ export function useKeyboardShortcuts() {
       if (e.key === '.') {
         e.preventDefault()
         appendToAmount('.')
+        return
+      }
+
+      if (e.key === '*') {
+        e.preventDefault()
+        appendToAmount('*')
       }
     }
 

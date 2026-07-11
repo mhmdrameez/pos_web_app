@@ -33,7 +33,7 @@ export function NumericKeypad() {
   )
 
   return (
-    <div className="grid grid-cols-4 grid-rows-4 gap-3 flex-1">
+    <div className="grid grid-cols-4 gap-3 flex-1">
       {digitBtn('7')}
       {digitBtn('8')}
       {digitBtn('9')}
@@ -51,16 +51,18 @@ export function NumericKeypad() {
       {digitBtn('1')}
       {digitBtn('2')}
       {digitBtn('3')}
-      <button
-        onClick={handleAddItem}
-        className="row-span-2 bg-primary text-white rounded-2xl text-lg font-semibold hover:bg-primary-hover active:bg-primary-hover shadow-sm"
-      >
-        Add Item
-      </button>
 
       {digitBtn('0')}
       {digitBtn('00')}
       {digitBtn('.')}
+      {digitBtn('*')}
+
+      <button
+        onClick={handleAddItem}
+        className="col-span-4 h-16 bg-primary text-white rounded-lg text-lg font-semibold hover:bg-primary-hover active:bg-primary-hover shadow-sm"
+      >
+        Add Item
+      </button>
     </div>
   )
 }

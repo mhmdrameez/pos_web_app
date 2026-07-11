@@ -23,7 +23,7 @@ describe('receipt printing', () => {
   it('uses printer-safe amounts and shows unit price, quantity, and totals', () => {
     const text = generateReceiptText(generateReceiptData(sale, 'Quick Sale'))
 
-    expect(text).toContain('Rs.500.00 * 2')
+    expect(text).toContain('Item total')
     expect(text).toContain('Rs.1,000.00')
     expect(text).toContain('TOTAL')
     expect(text).toContain('Rs.1,050.00')
@@ -34,5 +34,11 @@ describe('receipt printing', () => {
 
     expect([...bytes.slice(0, 5)]).toEqual([0x1b, 0x40, 0x1b, 0x4d, 0x00])
     expect([...bytes.slice(5)]).toEqual([...new TextEncoder().encode('Rs.500.00 * 2')])
+  })
+
+  it('uses a cut command without additional printer feed', () => {
+    const bytes = new EscPosEncoder().cut().encode()
+
+    expect([...bytes.slice(-4)]).toEqual([0x1d, 0x56, 0x41, 0x00])
   })
 })
