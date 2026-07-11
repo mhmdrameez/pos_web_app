@@ -22,6 +22,26 @@ const DEFAULT_CART: CartSnapshot = {
   discountPaise: 0,
 }
 
+const COMPLETED_SALES_STORAGE_KEY = 'quick-sale-pos:completed-sales'
+
+function getCompletedSalesBackup(): CompletedSale[] {
+  try {
+    const stored = localStorage.getItem(COMPLETED_SALES_STORAGE_KEY)
+    const sales: unknown = stored ? JSON.parse(stored) : []
+    return Array.isArray(sales) ? (sales as CompletedSale[]) : []
+  } catch {
+    return []
+  }
+}
+
+function saveCompletedSalesBackup(sales: CompletedSale[]): void {
+  try {
+    localStorage.setItem(COMPLETED_SALES_STORAGE_KEY, JSON.stringify(sales))
+  } catch {
+    // IndexedDB remains the primary local store if browser storage is unavailable or full.
+  }
+}
+
 class QuickSaleDB extends Dexie {
   savedOrders!: Table<SavedOrder>
   completedSales!: Table<CompletedSale>
@@ -89,11 +109,26 @@ export async function deleteSavedOrder(id: string): Promise<void> {
 }
 
 export async function getCompletedSales(): Promise<CompletedSale[]> {
-  return db.completedSales.orderBy('completedAt').reverse().toArray()
+  const sales = await db.completedSales.orderBy('completedAt').reverse().toArray()
+  if (sales.length > 0) {
+    saveCompletedSalesBackup(sales)
+    return sales
+  }
+
+  const backup = getCompletedSalesBackup()
+  if (backup.length > 0) {
+    await db.completedSales.bulkPut(backup)
+    return backup.sort((a, b) => b.completedAt - a.completedAt)
+  }
+
+  return []
 }
 
 export async function saveCompletedSale(sale: CompletedSale): Promise<void> {
   await db.completedSales.put(sale)
+  const sales = getCompletedSalesBackup().filter((storedSale) => storedSale.id !== sale.id)
+  sales.unshift(sale)
+  saveCompletedSalesBackup(sales)
 }
 
 export async function getNextInvoiceNumber(): Promise<string> {
