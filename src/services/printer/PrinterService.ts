@@ -97,7 +97,8 @@ export class PrinterService {
       encoder.tableRow('Discount', `-${data.discount}`)
     }
     encoder.bold(true).tableRow('TOTAL', data.grandTotal).bold(false)
-    encoder.newline()
+    // ESC d 1 explicitly prints and feeds one blank line before payment details.
+    encoder.feedLines(1)
 
     encoder.text(`Payment: ${data.paymentMethod}`)
     if (data.amountPaid) encoder.newline().text(`Paid: ${data.amountPaid}`)

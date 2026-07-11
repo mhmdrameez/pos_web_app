@@ -70,6 +70,12 @@ export class EscPosEncoder {
     return this
   }
 
+  feedLines(count = 1): this {
+    const lines = Math.max(0, Math.min(255, Math.floor(count)))
+    this.buffer.push(ESC, 0x64, lines)
+    return this
+  }
+
   encode(): Uint8Array {
     return new Uint8Array(this.buffer)
   }

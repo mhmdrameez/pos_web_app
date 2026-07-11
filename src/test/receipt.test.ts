@@ -47,4 +47,10 @@ describe('receipt printing', () => {
 
     expect([...bytes.slice(-4)]).toEqual([0x1d, 0x56, 0x41, 0x00])
   })
+
+  it('uses ESC d to add a blank line after the total section', () => {
+    const bytes = new EscPosEncoder().text('TOTAL').feedLines(1).encode()
+
+    expect([...bytes.slice(-3)]).toEqual([0x1b, 0x64, 0x01])
+  })
 })
