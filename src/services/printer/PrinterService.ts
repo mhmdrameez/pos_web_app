@@ -96,7 +96,7 @@ export class PrinterService {
 
    
 
-     const tearOffLines = 3 // Change this to 2 or 3 for less white space
+     const tearOffLines = 1 // Change this to 2 or 3 for less white space
   encoder.newline().align('center').text('Thank you!').newline(tearOffLines).cut()
 
     return encoder.encode()
