@@ -94,8 +94,10 @@ export class PrinterService {
     if (data.amountPaid) encoder.newline().text(`Paid: ${data.amountPaid}`)
     if (data.change) encoder.newline().text(`Change: ${data.change}`)
 
-    // Seven line feeds provide roughly a 3 cm tear-off margin on standard thermal paper.
-    encoder.newline().align('center').text('Thank you!').newline(7).cut()
+   
+
+     const tearOffLines = 3 // Change this to 2 or 3 for less white space
+  encoder.newline().align('center').text('Thank you!').newline(tearOffLines).cut()
 
     return encoder.encode()
   }
