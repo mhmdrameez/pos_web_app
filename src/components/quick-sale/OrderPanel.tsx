@@ -72,24 +72,27 @@ export function OrderPanel({ className = '' }: OrderPanelProps) {
   }
 
   return (
-    <div className={`flex flex-col bg-white border-l border-gray-200 ${className}`}>
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-        <h2 className="font-semibold text-gray-900 flex items-center gap-2">
-          <ShoppingCart className="w-5 h-5" />
-          Current Order
-        </h2>
+    <div className={`flex flex-col bg-[#f3f4f7] border-l border-gray-200 p-2.5 ${className}`}>
+      <div className="flex items-center justify-between gap-3 px-2.5 py-2.5 border-b border-gray-200">
+        <h2 className="font-semibold text-gray-900">Orders</h2>
         <button
           onClick={openCustomerModal}
-          className="flex items-center gap-1.5 text-sm text-primary hover:underline"
+          className="flex items-center gap-1.5 text-sm text-[#1e5790] border border-gray-300 bg-white hover:bg-gray-50 px-3 py-2 rounded-xl"
         >
           <User className="w-4 h-4" />
           {customer ? customer.name : 'Add Customer'}
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 min-h-0">
+      <div className="flex-1 overflow-y-auto min-h-0 rounded-xl bg-[#e9ebef] mt-2 px-4">
         {items.length === 0 ? (
-          <p className="text-gray-400 text-center py-12 text-sm">No items yet. Enter amount and tap Add Item.</p>
+          <div className="h-full grid place-items-center text-center text-gray-600">
+            <div>
+              <ShoppingCart className="w-14 h-14 mx-auto mb-3 text-gray-700" />
+              <p className="font-medium">Your cart is empty</p>
+              <p className="text-xs mt-3">Enter an amount and tap Add Item</p>
+            </div>
+          </div>
         ) : (
           items.map((item) => (
             <OrderItemRow
@@ -103,7 +106,7 @@ export function OrderPanel({ className = '' }: OrderPanelProps) {
         )}
       </div>
 
-      <div className="px-4 pb-4">
+      <div className="mt-2 rounded-xl bg-[#e9ebef] px-4 pb-3">
         <OrderSummary />
 
         <div className="grid grid-cols-2 gap-2 mt-4">

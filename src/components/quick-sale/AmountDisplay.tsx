@@ -6,9 +6,9 @@ export function AmountDisplay() {
   const entry = parseAmountAndQuantity(currentAmount)
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 p-6 mb-4 shadow-sm">
-      <p className="text-sm text-gray-500 mb-1 text-right">Amount</p>
-      <p className="text-5xl lg:text-6xl font-bold text-gray-900 text-right tabular-nums">
+    <div className="bg-[#f5f6fa] rounded-xl border border-gray-100 px-5 py-3 mb-3">
+      <p className="text-xs text-gray-500 mb-1">Amount</p>
+      <p className="text-2xl lg:text-3xl font-semibold text-gray-900 tabular-nums">
         {entry
           ? formatRupees(entry.unitPricePaise * entry.quantity)
           : formatRupeesFromString(currentAmount.split('*')[0] || '0')}

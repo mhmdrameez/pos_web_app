@@ -13,8 +13,8 @@ export function QuickSaleView() {
   useKeyboardShortcuts()
 
   return (
-    <div className="flex flex-1 min-h-0 relative">
-      <div className="flex-1 flex flex-col p-4 lg:p-6 min-w-0">
+    <div className="flex flex-1 min-h-0 relative bg-white">
+      <div className="flex-1 flex flex-col p-3 lg:p-4 min-w-0">
         <div className="flex items-center justify-between mb-4 md:hidden">
           <h2 className="text-lg font-semibold">Quick Sale</h2>
           <button
@@ -29,7 +29,7 @@ export function QuickSaleView() {
         <NumericKeypad />
       </div>
 
-      <OrderPanel className="hidden md:flex w-80 lg:w-96 shrink-0" />
+      <OrderPanel className="hidden md:flex w-[360px] lg:w-[390px] shrink-0" />
 
       {isCartDrawerOpen && (
         <div className="fixed inset-0 z-40 md:hidden">

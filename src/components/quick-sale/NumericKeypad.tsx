@@ -26,25 +26,25 @@ export function NumericKeypad() {
       variant="keypad"
       size="lg"
       onClick={() => handleDigit(key)}
-      className="h-full min-h-11 w-full text-xl font-medium"
+      className="h-full min-h-11 w-full text-2xl lg:text-3xl font-normal rounded-xl"
     >
       {key}
     </Button>
   )
 
   return (
-    <div className="grid grid-cols-4 grid-rows-4 gap-3 flex-1 min-h-0">
+    <div className="grid grid-cols-4 grid-rows-4 gap-2.5 lg:gap-3 flex-1 min-h-0">
       {digitBtn('7')}
       {digitBtn('8')}
       {digitBtn('9')}
-      <Button variant="keypad" size="lg" onClick={backspaceAmount} className="h-full min-h-11 w-full">
-        <Delete className="w-5 h-5 mx-auto" />
+      <Button variant="keypad" size="lg" onClick={backspaceAmount} className="h-full min-h-11 w-full rounded-xl">
+        <Delete className="w-7 h-7 mx-auto" />
       </Button>
 
       {digitBtn('4')}
       {digitBtn('5')}
       {digitBtn('6')}
-      <Button variant="keypad" size="lg" onClick={clearAmount} className="h-full min-h-11 w-full text-base">
+      <Button variant="keypad" size="lg" onClick={clearAmount} className="h-full min-h-11 w-full text-base rounded-xl">
         Clear
       </Button>
 
@@ -58,7 +58,7 @@ export function NumericKeypad() {
       {digitBtn('.')}
       <button
         onClick={handleAddItem}
-        className="h-full min-h-11 w-full bg-primary text-white rounded-lg text-sm font-semibold whitespace-nowrap hover:bg-primary-hover active:bg-primary-hover shadow-sm"
+        className="h-full min-h-11 w-full bg-[#1e5790] text-white rounded-xl text-base font-medium whitespace-nowrap hover:bg-primary-hover active:bg-primary-hover shadow-sm"
       >
         Add Item
       </button>

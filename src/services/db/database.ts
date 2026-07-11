@@ -8,7 +8,7 @@ import type {
 } from '../../types'
 
 const DEFAULT_SETTINGS: AppSettings = {
-  businessName: 'My Business',
+  businessName: 'INVOICE',
 }
 
 const DEFAULT_PRINTER: PrinterSettings = {
