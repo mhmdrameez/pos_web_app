@@ -20,6 +20,11 @@ export class PrinterService {
     return this.adapter.getDeviceName()
   }
 
+  async reconnect(deviceId: string): Promise<string | null> {
+    await this.adapter.reconnect(deviceId)
+    return this.adapter.getDeviceName()
+  }
+
   async disconnect(): Promise<void> {
     await this.adapter.disconnect()
   }
@@ -30,6 +35,10 @@ export class PrinterService {
 
   getDeviceName(): string | null {
     return this.adapter.getDeviceName()
+  }
+
+  getDeviceId(): string | null {
+    return this.adapter.getDeviceId()
   }
 
   async printReceipt(sale: CompletedSale, businessName: string, paperWidth: 58 | 80): Promise<void> {

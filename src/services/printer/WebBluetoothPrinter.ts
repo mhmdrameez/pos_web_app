@@ -42,6 +42,35 @@ export class WebBluetoothPrinter implements PrinterAdapter {
         optionalServices: PRINTER_SERVICE_UUIDS,
       })
 
+      await this.connectToDevice(device)
+    } catch (error) {
+      this.throwConnectionError(error)
+    }
+  }
+
+  async reconnect(deviceId: string): Promise<void> {
+    if (!this.isSupported()) {
+      throw new PrinterNotSupportedError()
+    }
+
+    try {
+      const bluetooth = navigator.bluetooth
+      if (!bluetooth?.getDevices) {
+        throw new PrinterConnectionError('Automatic reconnection is not supported by this browser')
+      }
+
+      const device = (await bluetooth.getDevices()).find((savedDevice) => savedDevice.id === deviceId)
+      if (!device) {
+        throw new PrinterConnectionError('Saved printer permission is no longer available')
+      }
+
+      await this.connectToDevice(device)
+    } catch (error) {
+      this.throwConnectionError(error)
+    }
+  }
+
+  private async connectToDevice(device: BluetoothDevice): Promise<void> {
       if (!device.gatt) {
         throw new PrinterConnectionError('Bluetooth GATT not available on device')
       }
@@ -92,7 +121,9 @@ export class WebBluetoothPrinter implements PrinterAdapter {
       device.addEventListener('gattserverdisconnected', () => {
         this.characteristic = null
       })
-    } catch (error) {
+  }
+
+  private throwConnectionError(error: unknown): never {
       if (error instanceof PrinterConnectionError || error instanceof PrinterNotSupportedError) {
         throw error
       }
@@ -101,7 +132,6 @@ export class WebBluetoothPrinter implements PrinterAdapter {
         throw new PrinterConnectionError('Printer pairing was cancelled')
       }
       throw new PrinterConnectionError(message)
-    }
   }
 
   async disconnect(): Promise<void> {
@@ -118,6 +148,10 @@ export class WebBluetoothPrinter implements PrinterAdapter {
 
   getDeviceName(): string | null {
     return this.device?.name ?? null
+  }
+
+  getDeviceId(): string | null {
+    return this.device?.id ?? null
   }
 
   async print(data: Uint8Array): Promise<void> {

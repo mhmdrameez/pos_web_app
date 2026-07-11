@@ -1,8 +1,10 @@
 export interface PrinterAdapter {
   isSupported(): boolean
   connect(): Promise<void>
+  reconnect(deviceId: string): Promise<void>
   disconnect(): Promise<void>
   isConnected(): boolean
+  getDeviceId(): string | null
   getDeviceName(): string | null
   print(data: Uint8Array): Promise<void>
 }

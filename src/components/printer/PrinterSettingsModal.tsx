@@ -41,7 +41,7 @@ export function PrinterSettingsModal() {
 
     try {
       const name = await printerService.connect()
-      setDevice(undefined, name ?? 'BLE Printer')
+      setDevice(printerService.getDeviceId() ?? undefined, name ?? 'BLE Printer')
       setStatus('connected')
       addToast('success', `Connected to ${name ?? 'printer'}`)
     } catch (error) {

@@ -4,6 +4,7 @@ import { getPrinterSettings, savePrinterSettings } from '../services/db/database
 import { useAppStore } from '../stores/useAppStore'
 import { useCartStore } from '../stores/useCartStore'
 import { usePrinterStore } from '../stores/usePrinterStore'
+import { printerService } from '../services/printer/PrinterService'
 
 export function usePersistence() {
   const setDbReady = useAppStore((s) => s.setDbReady)
@@ -34,6 +35,22 @@ export function usePersistence() {
         })
         loadPrinterSettings(printer)
         setDbReady(true)
+
+        if (printer.deviceId && printerService.isSupported()) {
+          usePrinterStore.getState().setStatus('connecting')
+          try {
+            const name = await printerService.reconnect(printer.deviceId)
+            if (!mounted) return
+            usePrinterStore.getState().setDevice(printer.deviceId, name ?? printer.deviceName)
+            usePrinterStore.getState().setStatus('connected')
+            usePrinterStore.getState().setLastError(null)
+          } catch (error) {
+            if (!mounted) return
+            const message = error instanceof Error ? error.message : 'Automatic printer connection failed'
+            usePrinterStore.getState().setStatus('error')
+            usePrinterStore.getState().setLastError(message)
+          }
+        }
       } catch {
         addToast('error', 'Failed to initialize database')
       }
