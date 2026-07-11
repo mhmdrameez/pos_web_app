@@ -105,7 +105,7 @@ export class PrinterService {
 
    
 
-     const tearOffLines = 3;
+     const tearOffLines = 4;
   encoder.newline().align('center').text('Thank you!').newline(tearOffLines).cut()
 
     return encoder.encode()
