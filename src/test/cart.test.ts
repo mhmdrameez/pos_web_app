@@ -40,6 +40,13 @@ describe('useCartStore', () => {
       expect(useCartStore.getState().items).toHaveLength(0)
     })
 
+    it('keeps decimal amounts when adding an item', () => {
+      useCartStore.getState().setCurrentAmount('25.50')
+      useCartStore.getState().addItem()
+
+      expect(useCartStore.getState().items[0].unitPricePaise).toBe(2550)
+    })
+
     it('adds the entered multiplication quantity to the item', () => {
       useCartStore.getState().setCurrentAmount('500*2')
       useCartStore.getState().addItem()

@@ -23,10 +23,11 @@ describe('receipt printing', () => {
   it('uses printer-safe amounts and shows unit price, quantity, and totals', () => {
     const text = generateReceiptText(generateReceiptData(sale, 'Quick Sale'))
 
-    expect(text).toContain('Item total')
+    expect(text).toContain('Tea')
     expect(text).toContain('Rs.1,000.00')
     expect(text).toContain('TOTAL')
     expect(text).toContain('Rs.1,050.00')
+    expect(text).not.toContain('Subtotal')
   })
 
   it('does not print the temporary preview invoice number', () => {

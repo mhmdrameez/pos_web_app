@@ -80,16 +80,10 @@ export class PrinterService {
 
     encoder.separator()
     for (const item of data.items) {
-      encoder.text(item.name).newline()
-      encoder.tableRow(
-        'Item total',
-        item.lineTotal,
-      )
+      encoder.tableRow(item.name, item.lineTotal)
     }
     encoder.separator()
 
-    encoder.tableRow('Subtotal', data.subtotal)
-    encoder.tableRow(`Tax`, data.tax)
     if (data.hasDiscount) {
       encoder.tableRow('Discount', `-${data.discount}`)
     }
@@ -100,7 +94,8 @@ export class PrinterService {
     if (data.amountPaid) encoder.newline().text(`Paid: ${data.amountPaid}`)
     if (data.change) encoder.newline().text(`Change: ${data.change}`)
 
-    encoder.newline().align('center').text('Thank you!').newline(3).cut()
+    // Seven line feeds provide roughly a 3 cm tear-off margin on standard thermal paper.
+    encoder.newline().align('center').text('Thank you!').newline(7).cut()
 
     return encoder.encode()
   }

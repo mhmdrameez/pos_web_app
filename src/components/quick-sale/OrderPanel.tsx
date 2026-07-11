@@ -8,6 +8,7 @@ import { Button } from '../ui/Button'
 import { printerService } from '../../services/printer/PrinterService'
 import { generateReceiptData, generateReceiptText } from '../../services/receipt/receiptGenerator'
 import { usePrinterStore } from '../../stores/usePrinterStore'
+import { formatRupees } from '../../utils/money'
 
 interface OrderPanelProps {
   className?: string
@@ -145,7 +146,7 @@ export function OrderPanel({ className = '' }: OrderPanelProps) {
             className="flex items-center justify-center gap-2"
           >
             <Receipt className="w-4 h-4" />
-            Bill {grandTotal > 0 ? `— ₹${(grandTotal / 100).toFixed(2)}` : ''}
+            Bill {grandTotal > 0 ? formatRupees(grandTotal) : ''}
           </Button>
         </div>
       </div>
