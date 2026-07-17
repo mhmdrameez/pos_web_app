@@ -33,12 +33,39 @@ export function usePersistence() {
         loadPrinterSettings(printer)
         setDbReady(true)
 
-        // Web Bluetooth getDevices() requires a user gesture — it cannot be
-        // called automatically on page load. Instead we mark the printer as
-        // 'disconnected' so the UI can show a one-tap "Reconnect" banner.
-        // The actual reconnect happens when the user taps that banner.
+        // TRICK: Web Bluetooth getDevices() requires a user gesture.
+        // We can't connect on page load, but we CAN connect on the very first 
+        // interaction the user makes with the app (tap, click, etc).
+        // We attach a one-time global listener that hijacks the first tap to reconnect.
         if (printer.deviceId && printerService.isSupported()) {
           usePrinterStore.getState().setStatus('disconnected')
+
+          const handleFirstInteraction = async () => {
+            // Remove listeners immediately so this only runs once
+            window.removeEventListener('pointerdown', handleFirstInteraction)
+            window.removeEventListener('keydown', handleFirstInteraction)
+
+            // Only attempt if still disconnected
+            const currentStatus = usePrinterStore.getState().status
+            if (currentStatus === 'connected' || currentStatus === 'connecting') return
+
+            usePrinterStore.getState().setStatus('connecting')
+            try {
+              const name = await printerService.reconnect(printer.deviceId!)
+              usePrinterStore.getState().setDevice(printer.deviceId, name ?? printer.deviceName)
+              usePrinterStore.getState().setStatus('connected')
+              usePrinterStore.getState().setLastError(null)
+              useAppStore.getState().addToast('success', `Printer auto-connected`)
+            } catch (error) {
+              const message = error instanceof Error ? error.message : 'Auto-connect failed'
+              usePrinterStore.getState().setStatus('error')
+              usePrinterStore.getState().setLastError(message)
+            }
+          }
+
+          // Listen for any tap, click, or keypress anywhere on the screen
+          window.addEventListener('pointerdown', handleFirstInteraction, { once: true })
+          window.addEventListener('keydown', handleFirstInteraction, { once: true })
         }
       } catch {
         addToast('error', 'Failed to initialize database')

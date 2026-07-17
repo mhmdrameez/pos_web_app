@@ -9,7 +9,6 @@ import { PrinterSettingsModal } from '../printer/PrinterSettingsModal'
 import { AppSettingsModal } from '../settings/AppSettingsModal'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { ToastContainer } from '../ui/Toast'
-import { ReconnectBanner } from '../printer/ReconnectBanner'
 
 export function AppLayout() {
   const activeSidebarView = useAppStore((s) => s.activeSidebarView)
@@ -44,7 +43,6 @@ export function AppLayout() {
       <div className="flex flex-1 min-h-0 rounded-2xl bg-white shadow-sm overflow-hidden">
         <Sidebar />
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
-          <ReconnectBanner />
           <main className="flex-1 flex flex-col min-w-0 min-h-0">{renderContent()}</main>
         </div>
       </div>
