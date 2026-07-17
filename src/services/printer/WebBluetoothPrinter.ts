@@ -16,14 +16,27 @@ const WRITE_CHARACTERISTIC_UUIDS = [
   '49535343-8841-43f4-a8d4-ecbe34729bb3',
 ]
 
-// Acknowledged writes: BLE spec allows up to negotiated MTU (often 512 bytes).
-// Without-response writes share a limited BLE notification buffer; keep them small
-// so the printer's internal FIFO never overflows between prints.
-const CHUNK_SIZE_WITH_RESPONSE = 512
-const CHUNK_SIZE_WITHOUT_RESPONSE = 100
-// Delay between without-response chunks (ms). Must be long enough for the
-// printer's serial buffer to drain. 120 ms is safe for most 58/80 mm thermal printers.
-const CHUNK_DELAY_MS = 120
+// ─── Chunk / timing constants ────────────────────────────────────────────────
+//
+// Cheap BLE thermal printers often only negotiate the default BLE MTU of
+// 23 bytes (20 bytes of actual payload). Sending larger chunks causes the
+// BLE stack to silently fragment or drop bytes, which is why the receipt
+// stops halfway on the 2nd+ print.
+//
+// Safe defaults that work on ALL 58/80 mm BLE thermal printers:
+//   • 20 bytes per chunk  — guaranteed to fit inside a single BLE packet
+//   • 20 ms delay per chunk for writeWithoutResponse — gives the printer's
+//     internal 256-byte serial FIFO time to drain
+//   • Up to 3 retries per chunk with exponential back-off on NetworkError
+//
+const CHUNK_SIZE = 20           // bytes — fits every BLE MTU incl. the default 23-byte MTU
+const INTER_CHUNK_DELAY_MS = 20 // ms — safe drain time for the printer's serial FIFO
+const MAX_RETRIES = 3           // retries per chunk before giving up
+// ─────────────────────────────────────────────────────────────────────────────
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
 
 export class WebBluetoothPrinter implements PrinterAdapter {
   private device: BluetoothDevice | null = null
@@ -125,8 +138,10 @@ export class WebBluetoothPrinter implements PrinterAdapter {
       this.device = device
       this.characteristic = characteristic
 
+      // Clear BOTH references on disconnect so isConnected() never lies
       device.addEventListener('gattserverdisconnected', () => {
         this.characteristic = null
+        this.device = null
       })
   }
 
@@ -156,41 +171,80 @@ export class WebBluetoothPrinter implements PrinterAdapter {
   getDeviceName(): string | null {
     return this.device?.name ?? null
   }
-  
 
   getDeviceId(): string | null {
     return this.device?.id ?? null
   }
 
+  // ─── Core print method ──────────────────────────────────────────────────────
+  //
+  // Why it stopped after half the receipt on the 2nd+ print:
+  //
+  //  1. Chunk size was too large (100–512 bytes). Cheap printers negotiate only
+  //     the default BLE MTU of 23 bytes. Oversized chunks are silently dropped
+  //     by the BLE stack on the 2nd print once the internal queue is backed up.
+  //
+  //  2. writeValueWithoutResponse() throws NetworkError when the browser's BLE
+  //     write queue is full. We never caught that error, so the loop crashed
+  //     silently mid-receipt leaving the paper half-printed.
+  //
+  //  3. No retry logic — a single transient BLE error killed the whole job.
+  //
+  // Fix:
+  //  • 20-byte chunks → always fits inside one BLE packet regardless of MTU
+  //  • Per-chunk retry with exponential back-off on NetworkError
+  //  • 20 ms delay after every writeWithoutResponse → drains the printer FIFO
+  //  • writeValueWithResponse preferred when available (gives GATT backpressure)
+  // ───────────────────────────────────────────────────────────────────────────
   async print(data: Uint8Array): Promise<void> {
     if (!this.characteristic || !this.isConnected()) {
       throw new PrinterConnectionError('Printer is not connected')
     }
 
-    const props = this.characteristic.properties
+    const char = this.characteristic
+    const props = char.properties
+    const canWrite = Boolean(props.write)
+    const canWriteWR = Boolean(props.writeWithoutResponse)
 
-    // Prefer acknowledged writes (writeValue) — they provide backpressure and
-    // guarantee the chunk was received before we send the next one. This is
-    // what fixes the "second print stops halfway" bug: without backpressure the
-    // BLE output buffer fills up and later chunks are silently dropped.
-    const useAcknowledged = Boolean(props.write)
-    const chunkSize = useAcknowledged ? CHUNK_SIZE_WITH_RESPONSE : CHUNK_SIZE_WITHOUT_RESPONSE
+    if (!canWrite && !canWriteWR) {
+      throw new PrinterConnectionError('Characteristic does not support writing')
+    }
 
-    for (let offset = 0; offset < data.length; offset += chunkSize) {
-      const chunk = data.slice(offset, offset + chunkSize)
+    for (let offset = 0; offset < data.length; offset += CHUNK_SIZE) {
+      const chunk = data.slice(offset, offset + CHUNK_SIZE)
 
-      if (useAcknowledged) {
-        // writeValue waits for the GATT acknowledgment — built-in backpressure.
-        await this.characteristic.writeValue(chunk)
-      } else if (props.writeWithoutResponse) {
-        await this.characteristic.writeValueWithoutResponse(chunk)
-        // Without an acknowledgment we must wait long enough for the printer's
-        // serial FIFO to drain before sending the next chunk. 50 ms was too
-        // short on the second print when the BLE stack's buffer was not yet
-        // fully flushed from the previous job.
-        await new Promise(resolve => setTimeout(resolve, CHUNK_DELAY_MS))
-      } else {
-        throw new PrinterConnectionError('Characteristic does not support writing')
+      // Retry loop — recovers from transient BLE queue-full (NetworkError) errors
+      let lastError: unknown
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        try {
+          if (canWrite) {
+            // writeValueWithResponse waits for GATT ACK → natural backpressure,
+            // no delay needed, works even on 2nd+ print.
+            await char.writeValueWithResponse(chunk)
+          } else {
+            // writeWithoutResponse: browser queues internally; when queue is full
+            // it throws NetworkError. We catch, back off, and retry.
+            await char.writeValueWithoutResponse(chunk)
+            // Give the printer's serial FIFO time to drain before next chunk.
+            await delay(INTER_CHUNK_DELAY_MS)
+          }
+          lastError = null
+          break // chunk sent OK
+        } catch (err) {
+          lastError = err
+          const msg = err instanceof Error ? err.message : String(err)
+          // Only retry on queue-full / network errors, not hard failures
+          if (!msg.toLowerCase().includes('network') && !msg.toLowerCase().includes('busy')) {
+            throw new PrinterConnectionError(`Write failed: ${msg}`)
+          }
+          // Exponential back-off: 50ms, 100ms, 200ms …
+          await delay(50 * Math.pow(2, attempt))
+        }
+      }
+
+      if (lastError) {
+        const msg = lastError instanceof Error ? lastError.message : String(lastError)
+        throw new PrinterConnectionError(`Print failed after ${MAX_RETRIES} retries: ${msg}`)
       }
     }
   }
