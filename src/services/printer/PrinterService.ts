@@ -114,12 +114,12 @@ export class PrinterService {
   if (data.amountPaid) encoder.newline().text(`Paid: ${data.amountPaid}`)
   if (data.change) encoder.newline().text(`Change: ${data.change}`)
   
-  // Footer - Ensure enough spacing before cut
-  encoder.newline(2)
+  // Footer
+  encoder.newline(1)
   encoder.align('center').text('Thank you!')
-  
-  // Important: Feed enough lines before cutting
-  encoder.feedLines(6) // Ensure full visibility
+
+  // Feed just enough lines for the paper cutter to engage cleanly
+  encoder.feedLines(2)
   encoder.cut()
 
   return encoder.encode()
