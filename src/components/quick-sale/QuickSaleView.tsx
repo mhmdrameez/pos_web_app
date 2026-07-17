@@ -1,4 +1,5 @@
-import { Menu, Printer, X } from 'lucide-react'
+import { useState } from 'react'
+import { Menu, Printer, X, ChevronRight, ChevronLeft } from 'lucide-react'
 import { AmountDisplay } from './AmountDisplay'
 import { NumericKeypad } from './NumericKeypad'
 import { OrderPanel } from './OrderPanel'
@@ -11,11 +12,16 @@ export function QuickSaleView() {
   const setCartDrawerOpen = useAppStore((s) => s.setCartDrawerOpen)
   const openPrinterSettings = useAppStore((s) => s.openPrinterSettings)
 
+  // Order panel collapse state — visible by default, collapsible on all sizes ≥ md
+  const [isOrderOpen, setIsOrderOpen] = useState(true)
+
   useKeyboardShortcuts()
 
   return (
     <div className="flex flex-1 min-h-0 relative bg-white">
-      <div className="flex-1 flex flex-col p-2 md:p-2 lg:p-4 min-w-0">
+      {/* ── Keypad column ── */}
+      <div className="flex-1 flex flex-col p-3 lg:p-4 min-w-0">
+        {/* Mobile header */}
         <div className="flex items-center justify-between mb-4 md:hidden">
           <h2 className="text-lg font-semibold">Quick Sale</h2>
           <div className="flex items-center gap-2">
@@ -35,22 +41,49 @@ export function QuickSaleView() {
             </button>
           </div>
         </div>
-        {/* Tablet: icon-only printer button to save vertical space */}
-        <div className="hidden md:flex justify-end mb-1 lg:mb-2">
+
+        {/* Desktop/tablet top bar */}
+        <div className="hidden md:flex justify-end mb-2">
           <button
             onClick={openPrinterSettings}
-            className="flex items-center gap-2 px-2 py-1.5 lg:px-3 lg:py-2 rounded-xl border border-gray-200 bg-white text-xs lg:text-sm font-medium text-primary hover:bg-gray-50"
+            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm font-medium text-primary hover:bg-gray-50"
           >
-            <Printer className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
-            <span className="hidden lg:inline">Printer</span>
+            <Printer className="w-4 h-4" />
+            Printer
           </button>
         </div>
+
         <AmountDisplay />
         <NumericKeypad />
       </div>
 
-      <OrderPanel className="hidden md:flex md:w-[220px] lg:w-[360px] xl:w-[390px] shrink-0" />
+      {/* ── Collapse toggle button (visible on md+) ── */}
+      <div className="hidden md:flex items-center">
+        <button
+          onClick={() => setIsOrderOpen((v) => !v)}
+          aria-label={isOrderOpen ? 'Collapse order panel' : 'Expand order panel'}
+          className="
+            relative z-10 -ml-3
+            w-6 h-14 flex items-center justify-center
+            bg-white border border-gray-200 rounded-full shadow-md
+            text-gray-500 hover:text-primary hover:border-primary
+            transition-colors
+          "
+        >
+          {isOrderOpen ? (
+            <ChevronRight className="w-4 h-4" />
+          ) : (
+            <ChevronLeft className="w-4 h-4" />
+          )}
+        </button>
+      </div>
 
+      {/* ── Order panel (collapsible on md+) ── */}
+      {isOrderOpen && (
+        <OrderPanel className="hidden md:flex w-[360px] lg:w-[390px] shrink-0" />
+      )}
+
+      {/* ── Mobile cart drawer ── */}
       {isCartDrawerOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
           <div className="absolute inset-0 bg-black/40" onClick={() => setCartDrawerOpen(false)} />
