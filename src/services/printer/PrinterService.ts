@@ -41,11 +41,15 @@ export class PrinterService {
     return this.adapter.getDeviceId()
   }
 
-  async printReceipt(sale: CompletedSale, businessName: string, paperWidth: 58 | 80): Promise<void> {
-    const receiptData = generateReceiptData(sale, businessName)
-    const encoded = this.encodeReceipt(receiptData, paperWidth)
-    await this.adapter.print(encoded)
-  }
+// In PrinterService.ts - add a flush method
+async printReceipt(sale: CompletedSale, businessName: string, paperWidth: 58 | 80): Promise<void> {
+  const receiptData = generateReceiptData(sale, businessName)
+  const encoded = this.encodeReceipt(receiptData, paperWidth)
+  await this.adapter.print(encoded)
+  
+  // Wait for printer to process all data
+  await new Promise(resolve => setTimeout(resolve, 500))
+}
 
   async printTestPage(businessName: string, paperWidth: 58 | 80): Promise<void> {
     const encoder = new EscPosEncoder(paperWidth)
@@ -72,45 +76,55 @@ export class PrinterService {
   }
 
   encodeReceipt(data: ReceiptData, paperWidth: 58 | 80): Uint8Array {
-    const encoder = new EscPosEncoder(paperWidth)
+  const encoder = new EscPosEncoder(paperWidth)
 
-    encoder.align('center').bold(true).size(1, 2).text(data.businessName).newline().bold(false).size()
+  // Header
+  encoder.align('center').bold(true).size(1, 2).text(data.businessName)
+    .newline().bold(false).size()
 
-    if (data.invoiceNumber !== 'PREVIEW') encoder.align('center').text(data.invoiceNumber).newline()
-    encoder.text(data.date).newline(2)
-
-    if (data.customer) {
-      encoder.align('left').bold(true).text('Customer').newline().bold(false)
-      encoder.text(data.customer.name).newline()
-      encoder.text(data.customer.phone).newline()
-      if (data.customer.email) encoder.text(data.customer.email).newline()
-      encoder.newline()
-    }
-
-    encoder.separator()
-    for (const item of data.items) {
-      encoder.tableRow(item.name, item.lineTotal)
-    }
-    encoder.separator()
-
-    if (data.hasDiscount) {
-      encoder.tableRow('Discount', `-${data.discount}`)
-    }
-    encoder.bold(true).tableRow('TOTAL', data.grandTotal).bold(false)
-    // ESC d 1 explicitly prints and feeds one blank line before payment details.
-    encoder.feedLines(1)
-
-    encoder.text(`Payment: ${data.paymentMethod}`)
-    if (data.amountPaid) encoder.newline().text(`Paid: ${data.amountPaid}`)
-    if (data.change) encoder.newline().text(`Change: ${data.change}`)
-
-   
-
-     const tearOffLines = 4;
-  encoder.newline().align('center').text('Thank you!').newline(tearOffLines).cut()
-
-    return encoder.encode()
+  if (data.invoiceNumber !== 'PREVIEW') {
+    encoder.align('center').text(data.invoiceNumber).newline()
   }
+  encoder.text(data.date).newline(2)
+
+  // Customer info
+  if (data.customer) {
+    encoder.align('left').bold(true).text('Customer').newline().bold(false)
+    encoder.text(data.customer.name).newline()
+    encoder.text(data.customer.phone).newline()
+    if (data.customer.email) encoder.text(data.customer.email).newline()
+    encoder.newline()
+  }
+
+  // Items
+  encoder.separator()
+  for (const item of data.items) {
+    encoder.tableRow(item.name, item.lineTotal)
+  }
+  encoder.separator()
+
+  // Totals
+  if (data.hasDiscount) {
+    encoder.tableRow('Discount', `-${data.discount}`)
+  }
+  encoder.bold(true).tableRow('TOTAL', data.grandTotal).bold(false)
+  encoder.feedLines(1)
+
+  // Payment details
+  encoder.text(`Payment: ${data.paymentMethod}`)
+  if (data.amountPaid) encoder.newline().text(`Paid: ${data.amountPaid}`)
+  if (data.change) encoder.newline().text(`Change: ${data.change}`)
+  
+  // Footer - Ensure enough spacing before cut
+  encoder.newline(2)
+  encoder.align('center').text('Thank you!')
+  
+  // Important: Feed enough lines before cutting
+  encoder.feedLines(6) // Ensure full visibility
+  encoder.cut()
+
+  return encoder.encode()
+}
 }
 
 export const printerService = new PrinterService()

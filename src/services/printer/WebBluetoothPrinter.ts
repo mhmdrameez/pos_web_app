@@ -149,26 +149,30 @@ export class WebBluetoothPrinter implements PrinterAdapter {
   getDeviceName(): string | null {
     return this.device?.name ?? null
   }
+  
 
   getDeviceId(): string | null {
     return this.device?.id ?? null
   }
 
-  async print(data: Uint8Array): Promise<void> {
-    if (!this.characteristic || !this.isConnected()) {
-      throw new PrinterConnectionError('Printer is not connected')
-    }
-
-    const props = this.characteristic.properties
-    for (let offset = 0; offset < data.length; offset += CHUNK_SIZE) {
-      const chunk = data.slice(offset, offset + CHUNK_SIZE)
-      if (props.writeWithoutResponse) {
-        await this.characteristic.writeValueWithoutResponse(chunk)
-      } else if (props.write) {
-        await this.characteristic.writeValue(chunk)
-      } else {
-        throw new PrinterConnectionError('Characteristic does not support writing')
-      }
-    }
+  // In WebBluetoothPrinter.ts - modify the print method
+async print(data: Uint8Array): Promise<void> {
+  if (!this.characteristic || !this.isConnected()) {
+    throw new PrinterConnectionError('Printer is not connected')
   }
+
+  const props = this.characteristic.properties
+  for (let offset = 0; offset < data.length; offset += CHUNK_SIZE) {
+    const chunk = data.slice(offset, offset + CHUNK_SIZE)
+    if (props.writeWithoutResponse) {
+      await this.characteristic.writeValueWithoutResponse(chunk)
+    } else if (props.write) {
+      await this.characteristic.writeValue(chunk)
+    } else {
+      throw new PrinterConnectionError('Characteristic does not support writing')
+    }
+    // Add small delay between chunks
+    await new Promise(resolve => setTimeout(resolve, 50))
+  }
+}
 }

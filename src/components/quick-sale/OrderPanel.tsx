@@ -57,6 +57,7 @@ export function OrderPanel({ className = '' }: OrderPanelProps) {
       } else {
         const data = generateReceiptData(previewSale, businessName)
         const text = generateReceiptText(data, paperWidth)
+        console.log('Print Preview:\n', text);
         const win = window.open('', '_blank', 'width=400,height=600')
         if (win) {
           win.document.write(`<pre style="font-family:monospace;font-size:12px;padding:16px">${text}</pre>`)

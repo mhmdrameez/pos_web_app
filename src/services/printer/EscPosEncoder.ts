@@ -64,11 +64,14 @@ export class EscPosEncoder {
     return this.text(`${left}${' '.repeat(padding)}${right}`).newline()
   }
 
-  cut(partial = false): this {
-    // GS V m n cuts without the printer adding its own extra paper feed.
-    this.buffer.push(GS, 0x56, partial ? 0x42 : 0x41, 0x00)
-    return this
-  }
+  // In EscPosEncoder.ts - modify the cut method
+cut(partial = false): this {
+  // Add a feed before cutting to ensure all content is printed
+  this.feedLines(3)
+  // Use GS V m (no extra paper feed after cut)
+  this.buffer.push(GS, 0x56, partial ? 0x42 : 0x41, 0x00)
+  return this
+}
 
   feedLines(count = 1): this {
     const lines = Math.max(0, Math.min(255, Math.floor(count)))
