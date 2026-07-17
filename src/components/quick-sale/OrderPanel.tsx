@@ -1,13 +1,9 @@
-import { User, Printer, Save, Trash2, Receipt, ShoppingCart } from 'lucide-react'
+import { Printer, Receipt, ShoppingCart } from 'lucide-react'
 import { useCartStore } from '../../stores/useCartStore'
 import { useAppStore } from '../../stores/useAppStore'
 import { useCheckout } from '../../hooks/useCheckout'
 import { OrderItemRow } from './OrderItemRow'
-import { OrderSummary } from './OrderSummary'
 import { Button } from '../ui/Button'
-import { printerService } from '../../services/printer/PrinterService'
-import { generateReceiptData, generateReceiptText } from '../../services/receipt/receiptGenerator'
-import { usePrinterStore } from '../../stores/usePrinterStore'
 import { formatRupees } from '../../utils/money'
 
 interface OrderPanelProps {
@@ -16,82 +12,36 @@ interface OrderPanelProps {
 
 export function OrderPanel({ className = '' }: OrderPanelProps) {
   const items = useCartStore((s) => s.items)
-  const customer = useCartStore((s) => s.customer)
   const grandTotal = useCartStore((s) => s.getGrandTotalPaise())
-  const clearCart = useCartStore((s) => s.clearCart)
-  const openCustomerModal = useAppStore((s) => s.openCustomerModal)
   const openCheckoutModal = useAppStore((s) => s.openCheckoutModal)
-  const showConfirm = useAppStore((s) => s.showConfirm)
   const addToast = useAppStore((s) => s.addToast)
-  const businessName = useAppStore((s) => s.businessName)
-  const paperWidth = usePrinterStore((s) => s.paperWidth)
-  const { saveCurrentOrder } = useCheckout()
+  const { completeSale } = useCheckout()
 
-  async function handlePrint() {
+  // Print = save the sale immediately as cash + print receipt, no modal
+  async function handlePrintAndSave() {
     if (items.length === 0) {
       addToast('error', 'Add items before printing')
       return
     }
-
-    const cart = useCartStore.getState()
-    const previewSale = {
-      id: 'preview',
-      orderNumber: 'PREVIEW',
-      invoiceNumber: 'PREVIEW',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      completedAt: Date.now(),
-      customer: customer ?? undefined,
-      items: [...items],
-      subtotalPaise: cart.getSubtotalPaise(),
-      discountPaise: cart.discountPaise,
-      grandTotalPaise: grandTotal,
-      status: 'draft' as const,
-      paymentMethod: 'cash' as const,
-    }
-
-    try {
-      if (printerService.isConnected()) {
-        await printerService.printReceipt(previewSale, businessName, paperWidth)
-        addToast('success', 'Bill sent to printer')
-      } else {
-        const data = generateReceiptData(previewSale, businessName)
-        const text = generateReceiptText(data, paperWidth)
-        console.log('Print Preview:\n', text);
-        const win = window.open('', '_blank', 'width=400,height=600')
-        if (win) {
-          win.document.write(`<pre style="font-family:monospace;font-size:12px;padding:16px">${text}</pre>`)
-          win.document.close()
-          win.print()
-        }
-        addToast('info', 'No printer connected — opened print preview')
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Print failed'
-      addToast('error', message)
-    }
+    await completeSale('cash', grandTotal, true)
   }
 
   return (
-    <div className={`flex flex-col bg-[#f3f4f7] border-l border-gray-200 p-2 lg:p-2.5 ${className}`}>
-      <div className="flex items-center justify-between gap-2 px-2 lg:px-2.5 py-2 border-b border-gray-200">
-        <h2 className="font-semibold text-sm lg:text-base text-gray-900">Orders</h2>
-        <button
-          onClick={openCustomerModal}
-          className="flex items-center gap-1 lg:gap-1.5 text-xs lg:text-sm text-[#1e5790] border border-gray-300 bg-white hover:bg-gray-50 px-2 lg:px-3 py-1.5 lg:py-2 rounded-xl"
-        >
-          <User className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
-          {customer ? customer.name : 'Add Customer'}
-        </button>
+    <div className={`flex flex-col bg-[#f3f4f7] border-l border-gray-200 ${className}`}>
+
+      {/* Header */}
+      <div className="flex items-center px-4 py-2.5 border-b border-gray-200 shrink-0">
+        <h2 className="font-semibold text-gray-900">Orders</h2>
       </div>
 
-      <div className="flex-1 overflow-y-auto min-h-0 rounded-xl bg-[#e9ebef] mt-1.5 lg:mt-2 px-2 lg:px-4">
+      {/* Item list — takes all available space */}
+      <div className="flex-1 overflow-y-auto min-h-0 bg-[#e9ebef] px-4">
         {items.length === 0 ? (
           <div className="h-full grid place-items-center text-center text-gray-600">
             <div>
               <ShoppingCart className="w-14 h-14 mx-auto mb-3 text-gray-700" />
               <p className="font-medium">Your cart is empty</p>
-              <p className="text-xs mt-3">Enter an amount and tap Add Item</p>
+              <p className="text-xs mt-2">Enter an amount and tap Add Item</p>
             </div>
           </div>
         ) : (
@@ -107,34 +57,24 @@ export function OrderPanel({ className = '' }: OrderPanelProps) {
         )}
       </div>
 
-      <div className="mt-1.5 lg:mt-2 rounded-xl bg-[#e9ebef] px-2 lg:px-4 pb-2 lg:pb-3">
-        <OrderSummary />
+      {/* Footer — total + 2 compact buttons */}
+      <div className="shrink-0 bg-[#e9ebef] px-4 pt-3 pb-3 border-t border-gray-200">
+        {/* Grand total */}
+        <div className="flex justify-between items-center font-bold text-gray-900 mb-3">
+          <span className="text-sm">Grand Total</span>
+          <span className="text-lg tabular-nums">
+            {grandTotal > 0 ? formatRupees(grandTotal) : '₹0'}
+          </span>
+        </div>
 
-        <div className="grid grid-cols-2 gap-1.5 lg:gap-2 mt-3 lg:mt-4">
+        {/* Two compact action buttons */}
+        <div className="grid grid-cols-2 gap-2">
           <Button
             variant="secondary"
-            onClick={() =>
-              showConfirm('Clear Order', 'Remove all items from the current order?', clearCart)
-            }
-            className="flex items-center justify-center gap-1.5 text-xs lg:text-sm py-2 lg:py-2.5"
+            onClick={handlePrintAndSave}
+            className="flex items-center justify-center gap-1.5 py-2 text-sm"
           >
-            <Trash2 className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
-            Clear
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => saveCurrentOrder()}
-            className="flex items-center justify-center gap-1.5 text-xs lg:text-sm py-2 lg:py-2.5"
-          >
-            <Save className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
-            Save
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={handlePrint}
-            className="flex items-center justify-center gap-1.5 text-xs lg:text-sm py-2 lg:py-2.5"
-          >
-            <Printer className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
+            <Printer className="w-4 h-4" />
             Print
           </Button>
           <Button
@@ -146,9 +86,9 @@ export function OrderPanel({ className = '' }: OrderPanelProps) {
               }
               openCheckoutModal()
             }}
-            className="flex items-center justify-center gap-1.5 text-xs lg:text-sm py-2 lg:py-2.5"
+            className="flex items-center justify-center gap-1.5 py-2 text-sm"
           >
-            <Receipt className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
+            <Receipt className="w-4 h-4" />
             Bill {grandTotal > 0 ? formatRupees(grandTotal) : ''}
           </Button>
         </div>
