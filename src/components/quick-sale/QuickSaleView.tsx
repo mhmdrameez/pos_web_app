@@ -15,7 +15,7 @@ export function QuickSaleView() {
 
   return (
     <div className="flex flex-1 min-h-0 relative bg-white">
-      <div className="flex-1 flex flex-col p-3 lg:p-4 min-w-0">
+      <div className="flex-1 flex flex-col p-2 md:p-2 lg:p-4 min-w-0">
         <div className="flex items-center justify-between mb-4 md:hidden">
           <h2 className="text-lg font-semibold">Quick Sale</h2>
           <div className="flex items-center gap-2">
@@ -35,20 +35,21 @@ export function QuickSaleView() {
             </button>
           </div>
         </div>
-        <div className="hidden md:flex justify-end mb-2">
+        {/* Tablet: icon-only printer button to save vertical space */}
+        <div className="hidden md:flex justify-end mb-1 lg:mb-2">
           <button
             onClick={openPrinterSettings}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm font-medium text-primary hover:bg-gray-50"
+            className="flex items-center gap-2 px-2 py-1.5 lg:px-3 lg:py-2 rounded-xl border border-gray-200 bg-white text-xs lg:text-sm font-medium text-primary hover:bg-gray-50"
           >
-            <Printer className="w-4 h-4" />
-            Printer
+            <Printer className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
+            <span className="hidden lg:inline">Printer</span>
           </button>
         </div>
         <AmountDisplay />
         <NumericKeypad />
       </div>
 
-      <OrderPanel className="hidden md:flex md:w-[280px] lg:w-[360px] xl:w-[390px] shrink-0" />
+      <OrderPanel className="hidden md:flex md:w-[220px] lg:w-[360px] xl:w-[390px] shrink-0" />
 
       {isCartDrawerOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
