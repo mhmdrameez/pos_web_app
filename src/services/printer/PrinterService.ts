@@ -119,7 +119,6 @@ export class PrinterService {
   encoder.align('center').text('Thank you!')
 
   // Feed just enough lines for the paper cutter to engage cleanly
-  encoder.feedLines(2)
   encoder.cut()
 
   return encoder.encode()
