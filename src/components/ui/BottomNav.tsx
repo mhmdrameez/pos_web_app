@@ -1,11 +1,9 @@
-import { ShoppingCart, Zap, Bookmark } from 'lucide-react'
+import { ShoppingCart } from 'lucide-react'
 import { useAppStore } from '../../stores/useAppStore'
 import type { BottomTab } from '../../types'
 
 const tabs: { id: BottomTab; label: string; icon: typeof ShoppingCart }[] = [
   { id: 'sale', label: 'Sale', icon: ShoppingCart },
-  { id: 'quick-sale', label: 'Quick Sale', icon: Zap },
-  { id: 'saved-orders', label: 'Saved Orders', icon: Bookmark },
 ]
 
 export function BottomNav() {
@@ -23,7 +21,7 @@ export function BottomNav() {
               ? 'bg-white border-primary text-primary shadow-sm'
               : 'border-gray-200 text-gray-700 hover:bg-gray-50'
             }`}
-          >
+        >
           <Icon className="w-4 h-4" />
           {label}
         </button>

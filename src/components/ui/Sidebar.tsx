@@ -1,7 +1,5 @@
 import {
   Menu,
-  Zap,
-  Bookmark,
   History,
   Printer,
   Settings,
@@ -9,9 +7,7 @@ import {
 import { useAppStore } from '../../stores/useAppStore'
 import type { SidebarView } from '../../types'
 
-const navItems: { id: SidebarView; label: string; icon: typeof Zap }[] = [
-  { id: 'quick-sale', label: 'Quick Sale', icon: Zap },
-  { id: 'saved-orders', label: 'Saved Orders', icon: Bookmark },
+const navItems: { id: SidebarView; label: string; icon: typeof History }[] = [
   { id: 'sales-history', label: 'Sales History', icon: History },
   { id: 'printer-settings', label: 'Printer Settings', icon: Printer },
   { id: 'app-settings', label: 'Application Settings', icon: Settings },
