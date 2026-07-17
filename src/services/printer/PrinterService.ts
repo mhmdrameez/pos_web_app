@@ -41,13 +41,12 @@ export class PrinterService {
     return this.adapter.getDeviceId()
   }
 
-// In PrinterService.ts - add a flush method
-async printReceipt(sale: CompletedSale, businessName: string, paperWidth: 58 | 80): Promise<void> {
+  async printReceipt(sale: CompletedSale, businessName: string, paperWidth: 58 | 80): Promise<void> {
   const receiptData = generateReceiptData(sale, businessName)
   const encoded = this.encodeReceipt(receiptData, paperWidth)
   await this.adapter.print(encoded)
   
-  // Wait for printer to process all data
+  // Allow the printer to finish processing before the next job can start
   await new Promise(resolve => setTimeout(resolve, 500))
 }
 

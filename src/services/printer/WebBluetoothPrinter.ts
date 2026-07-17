@@ -16,7 +16,14 @@ const WRITE_CHARACTERISTIC_UUIDS = [
   '49535343-8841-43f4-a8d4-ecbe34729bb3',
 ]
 
-const CHUNK_SIZE = 512
+// Acknowledged writes: BLE spec allows up to negotiated MTU (often 512 bytes).
+// Without-response writes share a limited BLE notification buffer; keep them small
+// so the printer's internal FIFO never overflows between prints.
+const CHUNK_SIZE_WITH_RESPONSE = 512
+const CHUNK_SIZE_WITHOUT_RESPONSE = 100
+// Delay between without-response chunks (ms). Must be long enough for the
+// printer's serial buffer to drain. 120 ms is safe for most 58/80 mm thermal printers.
+const CHUNK_DELAY_MS = 120
 
 export class WebBluetoothPrinter implements PrinterAdapter {
   private device: BluetoothDevice | null = null
@@ -155,24 +162,36 @@ export class WebBluetoothPrinter implements PrinterAdapter {
     return this.device?.id ?? null
   }
 
-  // In WebBluetoothPrinter.ts - modify the print method
-async print(data: Uint8Array): Promise<void> {
-  if (!this.characteristic || !this.isConnected()) {
-    throw new PrinterConnectionError('Printer is not connected')
-  }
-
-  const props = this.characteristic.properties
-  for (let offset = 0; offset < data.length; offset += CHUNK_SIZE) {
-    const chunk = data.slice(offset, offset + CHUNK_SIZE)
-    if (props.writeWithoutResponse) {
-      await this.characteristic.writeValueWithoutResponse(chunk)
-    } else if (props.write) {
-      await this.characteristic.writeValue(chunk)
-    } else {
-      throw new PrinterConnectionError('Characteristic does not support writing')
+  async print(data: Uint8Array): Promise<void> {
+    if (!this.characteristic || !this.isConnected()) {
+      throw new PrinterConnectionError('Printer is not connected')
     }
-    // Add small delay between chunks
-    await new Promise(resolve => setTimeout(resolve, 50))
+
+    const props = this.characteristic.properties
+
+    // Prefer acknowledged writes (writeValue) — they provide backpressure and
+    // guarantee the chunk was received before we send the next one. This is
+    // what fixes the "second print stops halfway" bug: without backpressure the
+    // BLE output buffer fills up and later chunks are silently dropped.
+    const useAcknowledged = Boolean(props.write)
+    const chunkSize = useAcknowledged ? CHUNK_SIZE_WITH_RESPONSE : CHUNK_SIZE_WITHOUT_RESPONSE
+
+    for (let offset = 0; offset < data.length; offset += chunkSize) {
+      const chunk = data.slice(offset, offset + chunkSize)
+
+      if (useAcknowledged) {
+        // writeValue waits for the GATT acknowledgment — built-in backpressure.
+        await this.characteristic.writeValue(chunk)
+      } else if (props.writeWithoutResponse) {
+        await this.characteristic.writeValueWithoutResponse(chunk)
+        // Without an acknowledgment we must wait long enough for the printer's
+        // serial FIFO to drain before sending the next chunk. 50 ms was too
+        // short on the second print when the BLE stack's buffer was not yet
+        // fully flushed from the previous job.
+        await new Promise(resolve => setTimeout(resolve, CHUNK_DELAY_MS))
+      } else {
+        throw new PrinterConnectionError('Characteristic does not support writing')
+      }
+    }
   }
-}
 }
