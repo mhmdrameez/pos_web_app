@@ -48,7 +48,7 @@ export function QuickSaleView() {
         <NumericKeypad />
       </div>
 
-      <OrderPanel className="hidden md:flex w-[360px] lg:w-[390px] shrink-0" />
+      <OrderPanel className="hidden md:flex md:w-[280px] lg:w-[360px] xl:w-[390px] shrink-0" />
 
       {isCartDrawerOpen && (
         <div className="fixed inset-0 z-40 md:hidden">

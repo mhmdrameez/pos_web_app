@@ -73,19 +73,19 @@ export function OrderPanel({ className = '' }: OrderPanelProps) {
   }
 
   return (
-    <div className={`flex flex-col bg-[#f3f4f7] border-l border-gray-200 p-2.5 ${className}`}>
-      <div className="flex items-center justify-between gap-3 px-2.5 py-2.5 border-b border-gray-200">
-        <h2 className="font-semibold text-gray-900">Orders</h2>
+    <div className={`flex flex-col bg-[#f3f4f7] border-l border-gray-200 p-2 lg:p-2.5 ${className}`}>
+      <div className="flex items-center justify-between gap-2 px-2 lg:px-2.5 py-2 border-b border-gray-200">
+        <h2 className="font-semibold text-sm lg:text-base text-gray-900">Orders</h2>
         <button
           onClick={openCustomerModal}
-          className="flex items-center gap-1.5 text-sm text-[#1e5790] border border-gray-300 bg-white hover:bg-gray-50 px-3 py-2 rounded-xl"
+          className="flex items-center gap-1 lg:gap-1.5 text-xs lg:text-sm text-[#1e5790] border border-gray-300 bg-white hover:bg-gray-50 px-2 lg:px-3 py-1.5 lg:py-2 rounded-xl"
         >
-          <User className="w-4 h-4" />
+          <User className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
           {customer ? customer.name : 'Add Customer'}
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto min-h-0 rounded-xl bg-[#e9ebef] mt-2 px-4">
+      <div className="flex-1 overflow-y-auto min-h-0 rounded-xl bg-[#e9ebef] mt-1.5 lg:mt-2 px-2 lg:px-4">
         {items.length === 0 ? (
           <div className="h-full grid place-items-center text-center text-gray-600">
             <div>
@@ -107,34 +107,34 @@ export function OrderPanel({ className = '' }: OrderPanelProps) {
         )}
       </div>
 
-      <div className="mt-2 rounded-xl bg-[#e9ebef] px-4 pb-3">
+      <div className="mt-1.5 lg:mt-2 rounded-xl bg-[#e9ebef] px-2 lg:px-4 pb-2 lg:pb-3">
         <OrderSummary />
 
-        <div className="grid grid-cols-2 gap-2 mt-4">
+        <div className="grid grid-cols-2 gap-1.5 lg:gap-2 mt-3 lg:mt-4">
           <Button
             variant="secondary"
             onClick={() =>
               showConfirm('Clear Order', 'Remove all items from the current order?', clearCart)
             }
-            className="flex items-center justify-center gap-2"
+            className="flex items-center justify-center gap-1.5 text-xs lg:text-sm py-2 lg:py-2.5"
           >
-            <Trash2 className="w-4 h-4" />
-            Clear Order
+            <Trash2 className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
+            Clear
           </Button>
           <Button
             variant="secondary"
             onClick={() => saveCurrentOrder()}
-            className="flex items-center justify-center gap-2"
+            className="flex items-center justify-center gap-1.5 text-xs lg:text-sm py-2 lg:py-2.5"
           >
-            <Save className="w-4 h-4" />
-            Save Order
+            <Save className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
+            Save
           </Button>
           <Button
             variant="secondary"
             onClick={handlePrint}
-            className="flex items-center justify-center gap-2"
+            className="flex items-center justify-center gap-1.5 text-xs lg:text-sm py-2 lg:py-2.5"
           >
-            <Printer className="w-4 h-4" />
+            <Printer className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
             Print
           </Button>
           <Button
@@ -146,9 +146,9 @@ export function OrderPanel({ className = '' }: OrderPanelProps) {
               }
               openCheckoutModal()
             }}
-            className="flex items-center justify-center gap-2"
+            className="flex items-center justify-center gap-1.5 text-xs lg:text-sm py-2 lg:py-2.5"
           >
-            <Receipt className="w-4 h-4" />
+            <Receipt className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
             Bill {grandTotal > 0 ? formatRupees(grandTotal) : ''}
           </Button>
         </div>
