@@ -220,7 +220,9 @@ export class WebBluetoothPrinter implements PrinterAdapter {
           if (canWrite) {
             // writeValueWithResponse waits for GATT ACK → natural backpressure,
             // no delay needed, works even on 2nd+ print.
-            await char.writeValueWithResponse(chunk)
+            // writeValue is the acknowledged (write-with-response) call in the
+            // Web Bluetooth TS types — it waits for the GATT ACK before returning.
+            await char.writeValue(chunk)
           } else {
             // writeWithoutResponse: browser queues internally; when queue is full
             // it throws NetworkError. We catch, back off, and retry.
