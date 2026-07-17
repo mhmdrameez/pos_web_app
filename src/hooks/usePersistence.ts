@@ -33,20 +33,12 @@ export function usePersistence() {
         loadPrinterSettings(printer)
         setDbReady(true)
 
+        // Web Bluetooth getDevices() requires a user gesture — it cannot be
+        // called automatically on page load. Instead we mark the printer as
+        // 'disconnected' so the UI can show a one-tap "Reconnect" banner.
+        // The actual reconnect happens when the user taps that banner.
         if (printer.deviceId && printerService.isSupported()) {
-          usePrinterStore.getState().setStatus('connecting')
-          try {
-            const name = await printerService.reconnect(printer.deviceId)
-            if (!mounted) return
-            usePrinterStore.getState().setDevice(printer.deviceId, name ?? printer.deviceName)
-            usePrinterStore.getState().setStatus('connected')
-            usePrinterStore.getState().setLastError(null)
-          } catch (error) {
-            if (!mounted) return
-            const message = error instanceof Error ? error.message : 'Automatic printer connection failed'
-            usePrinterStore.getState().setStatus('error')
-            usePrinterStore.getState().setLastError(message)
-          }
+          usePrinterStore.getState().setStatus('disconnected')
         }
       } catch {
         addToast('error', 'Failed to initialize database')
