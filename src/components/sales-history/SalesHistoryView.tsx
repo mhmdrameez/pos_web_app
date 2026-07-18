@@ -29,6 +29,7 @@ export function SalesHistoryView() {
   const [sendErrorId, setSendErrorId] = useState<string | null>(null)
   const [digestSending, setDigestSending] = useState(false)
   const [emailConfigured, setEmailConfigured] = useState(false)
+  const [filterDate, setFilterDate] = useState('')
   const addToast = useAppStore((s) => s.addToast)
   const openAppSettings = useAppStore((s) => s.openAppSettings)
 
@@ -52,7 +53,14 @@ export function SalesHistoryView() {
     })
   }, [load])
 
-  const sortedSales = [...sales].sort((a, b) =>
+  const filteredSales = sales.filter((sale) => {
+    if (!filterDate) return true
+    const saleDate = new Date(sale.completedAt)
+    const dateStr = `${saleDate.getFullYear()}-${String(saleDate.getMonth() + 1).padStart(2, '0')}-${String(saleDate.getDate()).padStart(2, '0')}`
+    return dateStr === filterDate
+  })
+
+  const sortedSales = [...filteredSales].sort((a, b) =>
     sortDir === 'desc' ? b.completedAt - a.completedAt : a.completedAt - b.completedAt,
   )
 
@@ -121,45 +129,70 @@ export function SalesHistoryView() {
           Sales History
           {sales.length > 0 && (
             <span className="ml-2 text-sm font-normal text-gray-400">
-              {sales.length} invoice{sales.length !== 1 ? 's' : ''}
+              {filteredSales.length} invoice{filteredSales.length !== 1 ? 's' : ''}
             </span>
           )}
         </h2>
 
-        {/* Email not configured nudge */}
-        {!emailConfigured && (
-          <button
-            type="button"
-            onClick={openAppSettings}
-            className="flex items-center gap-1.5 text-xs text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors font-medium"
-          >
-            <Mail className="w-3.5 h-3.5" />
-            Set up email to send invoices
-          </button>
-        )}
-
-        {/* Daily Report Button */}
-        {emailConfigured && (
-          <Button
-            id="send-daily-report-btn"
-            variant="secondary"
-            size="sm"
-            onClick={handleSendDigest}
-            disabled={digestSending}
-            className="flex items-center gap-2"
-          >
-            {digestSending ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Send className="w-3.5 h-3.5" />
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Date Filter */}
+          <div className="flex items-center gap-2">
+            <label htmlFor="date-filter" className="text-sm text-gray-500 font-medium">Date:</label>
+            <input
+              id="date-filter"
+              type="date"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
+            {filterDate && (
+              <button
+                type="button"
+                onClick={() => setFilterDate('')}
+                className="text-xs text-gray-400 hover:text-gray-600 underline"
+              >
+                Clear
+              </button>
             )}
-            {digestSending ? 'Sending…' : 'Send Daily Report'}
-          </Button>
-        )}
+          </div>
+
+          {/* Email not configured nudge */}
+          {!emailConfigured && (
+            <button
+              type="button"
+              onClick={openAppSettings}
+              className="flex items-center gap-1.5 text-xs text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors font-medium"
+            >
+              <Mail className="w-3.5 h-3.5" />
+              Set up email to send invoices
+            </button>
+          )}
+
+          {/* Daily Report Button */}
+          {emailConfigured && (
+            <Button
+              id="send-daily-report-btn"
+              variant="secondary"
+              size="sm"
+              onClick={handleSendDigest}
+              disabled={digestSending}
+              className="flex items-center gap-2"
+            >
+              {digestSending ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Send className="w-3.5 h-3.5" />
+              )}
+              {digestSending ? 'Sending…' : 'Send Daily Report'}
+            </Button>
+          )}
+        </div>
       </div>
 
-      {sales.length === 0 ? (
-        <p className="text-gray-400 text-center py-12">No completed sales yet.</p>
+      {filteredSales.length === 0 ? (
+        <p className="text-gray-400 text-center py-12">
+          {sales.length === 0 ? 'No completed sales yet.' : 'No sales match the selected date.'}
+        </p>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-gray-100">
           <table className="w-full text-sm">
