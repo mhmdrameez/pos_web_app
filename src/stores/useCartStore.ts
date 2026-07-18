@@ -91,7 +91,7 @@ export const useCartStore = create<CartState>((set, get) => ({
 
     const newItem: CartItem = {
       id: generateId(),
-      name: `Item ${getAlphabetName(nextItemNumber)}`,
+      name: `${entry.unitPricePaise / 100} × ${entry.quantity}`,
       unitPricePaise: entry.unitPricePaise,
       quantity: entry.quantity,
     }
