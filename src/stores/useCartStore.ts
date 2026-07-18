@@ -91,7 +91,7 @@ export const useCartStore = create<CartState>((set, get) => ({
 
     const newItem: CartItem = {
       id: generateId(),
-      name: `${entry.unitPricePaise / 100} × ${entry.quantity}`,
+      name: `${entry.unitPricePaise / 100} x ${entry.quantity}`,
       unitPricePaise: entry.unitPricePaise,
       quantity: entry.quantity,
     }
@@ -142,11 +142,17 @@ export const useCartStore = create<CartState>((set, get) => ({
     }),
 
   loadCart: (data) => {
+    // Migrate old item names: replace Unicode × with plain x
+    const migratedItems = data.items.map((item) => ({
+      ...item,
+      name: item.name.replace(/\u00d7/g, 'x'),
+    }))
+
     const maxItemNum =
       data.nextItemNumber ??
-      (data.items.length > 0
+      (migratedItems.length > 0
         ? Math.max(
-            ...data.items.map((item) => {
+            ...migratedItems.map((item) => {
               const matchAlpha = item.name.match(/Item ([A-Z]+)$/)
               if (matchAlpha) return parseAlphabetName(matchAlpha[1])
               const matchNum = item.name.match(/Item (\d+)$/)
@@ -156,7 +162,7 @@ export const useCartStore = create<CartState>((set, get) => ({
         : 1)
 
     set({
-      items: data.items,
+      items: migratedItems,
       customer: data.customer ?? null,
       discountPaise: data.discountPaise ?? 0,
       currentAmount: '',
