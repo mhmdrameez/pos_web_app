@@ -21,6 +21,11 @@ const paymentLabels: Record<string, string> = { cash: 'Cash', upi: 'UPI', card: 
 
 type SortDir = 'desc' | 'asc'
 
+function getTodayDateStr() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 export function SalesHistoryView() {
   const [sales, setSales] = useState<CompletedSale[]>([])
   const [loading, setLoading] = useState(true)
@@ -29,7 +34,7 @@ export function SalesHistoryView() {
   const [sendErrorId, setSendErrorId] = useState<string | null>(null)
   const [digestSending, setDigestSending] = useState(false)
   const [emailConfigured, setEmailConfigured] = useState(false)
-  const [filterDate, setFilterDate] = useState('')
+  const [filterDate, setFilterDate] = useState(getTodayDateStr)
   const addToast = useAppStore((s) => s.addToast)
   const openAppSettings = useAppStore((s) => s.openAppSettings)
 
