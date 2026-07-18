@@ -4,9 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"vite\" \"node api/server.js\" --names \"vite,api\" --prefix-colors \"cyan,magenta\"",
-    "dev:vite": "vite",
-    "dev:api": "node api/server.js",
+    "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",

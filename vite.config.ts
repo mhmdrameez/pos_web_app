@@ -1,11 +1,101 @@
-import { defineConfig } from 'vitest/config'
+import { defineConfig, type Plugin } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 
+// ---------------------------------------------------------------------------
+// Email API Plugin
+// Adds a POST /api/send-email endpoint directly inside the Vite dev server.
+// This avoids CORS entirely — the call to Resend happens from Node.js,
+// not from the browser. No separate Express server needed.
+// ---------------------------------------------------------------------------
+function emailApiPlugin(): Plugin {
+  return {
+    name: 'email-api',
+    configureServer(server) {
+      server.middlewares.use(
+        '/api/send-email',
+        async (req: IncomingMessage, res: ServerResponse) => {
+          res.setHeader('Content-Type', 'application/json')
+
+          if (req.method !== 'POST') {
+            res.writeHead(405).end(JSON.stringify({ error: 'Method not allowed' }))
+            return
+          }
+
+          // Read request body
+          const chunks: Buffer[] = []
+          for await (const chunk of req) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string))
+          }
+
+          let body: { apiKey?: string; from?: string; to?: string; subject?: string; html?: string }
+          try {
+            body = JSON.parse(Buffer.concat(chunks).toString('utf-8')) as typeof body
+          } catch {
+            res.writeHead(400).end(JSON.stringify({ error: 'Invalid JSON body' }))
+            return
+          }
+
+          const { apiKey, from, to, subject, html } = body
+
+          // Validate fields
+          if (!apiKey || typeof apiKey !== 'string' || !apiKey.startsWith('re_')) {
+            res.writeHead(400).end(JSON.stringify({ error: 'Invalid Resend API key. It must start with "re_".' }))
+            return
+          }
+          if (!from || !from.includes('@')) {
+            res.writeHead(400).end(JSON.stringify({ error: 'Invalid "from" email.' }))
+            return
+          }
+          if (!to || !to.includes('@')) {
+            res.writeHead(400).end(JSON.stringify({ error: 'Invalid "to" email.' }))
+            return
+          }
+          if (!subject || !html) {
+            res.writeHead(400).end(JSON.stringify({ error: 'Missing subject or html.' }))
+            return
+          }
+
+          // Call Resend from Node.js — no CORS restriction
+          try {
+            const resendRes = await fetch('https://api.resend.com/emails', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${apiKey}`,
+              },
+              body: JSON.stringify({ from, to: [to], subject, html }),
+            })
+
+            const data = (await resendRes.json().catch(() => ({}))) as {
+              id?: string
+              message?: string
+              name?: string
+            }
+
+            if (!resendRes.ok) {
+              res
+                .writeHead(resendRes.status)
+                .end(JSON.stringify({ error: data.message ?? `Resend error (${resendRes.status})` }))
+              return
+            }
+
+            res.writeHead(200).end(JSON.stringify({ success: true, id: data.id }))
+          } catch (err) {
+            const message = err instanceof Error ? err.message : 'Failed to reach Resend API'
+            res.writeHead(502).end(JSON.stringify({ error: message }))
+          }
+        },
+      )
+    },
+  }
+}
 
 export default defineConfig({
   plugins: [
+    emailApiPlugin(),
     react(),
     tailwindcss(),
     VitePWA({
@@ -57,11 +147,5 @@ export default defineConfig({
   },
   server: {
     allowedHosts: true,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-      },
-    },
   },
 })
