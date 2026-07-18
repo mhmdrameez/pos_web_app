@@ -94,7 +94,7 @@ export function generateReceiptText(data: ReceiptData, paperWidth: 58 | 80 = 58)
 
   lines.push('-'.repeat(width))
   for (const item of data.items) {
-    lines.push(row(item.name, item.lineTotal))
+    lines.push(row(`${item.name} x${item.quantity}`, item.lineTotal))
   }
   lines.push('-'.repeat(width))
   if (data.hasDiscount) lines.push(row('Discount', `-${data.discount}`))

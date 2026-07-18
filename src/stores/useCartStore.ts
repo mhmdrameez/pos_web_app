@@ -8,6 +8,25 @@ import {
 } from '../utils/money'
 import { generateId } from '../utils/id'
 
+export function getAlphabetName(num: number): string {
+  let result = ''
+  let temp = num
+  while (temp > 0) {
+    temp--
+    result = String.fromCharCode(65 + (temp % 26)) + result
+    temp = Math.floor(temp / 26)
+  }
+  return result
+}
+
+export function parseAlphabetName(str: string): number {
+  let result = 0
+  for (let i = 0; i < str.length; i++) {
+    result = result * 26 + (str.charCodeAt(i) - 64)
+  }
+  return result
+}
+
 interface CartState {
   items: CartItem[]
   currentAmount: string
@@ -72,7 +91,7 @@ export const useCartStore = create<CartState>((set, get) => ({
 
     const newItem: CartItem = {
       id: generateId(),
-      name: `Item ${nextItemNumber}`,
+      name: `Item ${getAlphabetName(nextItemNumber)}`,
       unitPricePaise: entry.unitPricePaise,
       quantity: entry.quantity,
     }
@@ -128,8 +147,10 @@ export const useCartStore = create<CartState>((set, get) => ({
       (data.items.length > 0
         ? Math.max(
             ...data.items.map((item) => {
-              const match = item.name.match(/Item (\d+)/)
-              return match ? parseInt(match[1], 10) : 0
+              const matchAlpha = item.name.match(/Item ([A-Z]+)$/)
+              if (matchAlpha) return parseAlphabetName(matchAlpha[1])
+              const matchNum = item.name.match(/Item (\d+)$/)
+              return matchNum ? parseInt(matchNum[1], 10) : 0
             }),
           ) + 1
         : 1)

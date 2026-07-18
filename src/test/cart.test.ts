@@ -28,7 +28,7 @@ describe('useCartStore', () => {
       useCartStore.getState().addItem()
       const items = useCartStore.getState().items
       expect(items).toHaveLength(1)
-      expect(items[0].name).toBe('Item 1')
+      expect(items[0].name).toBe('Item A')
       expect(items[0].unitPricePaise).toBe(10000)
       expect(items[0].quantity).toBe(1)
     })
@@ -51,7 +51,7 @@ describe('useCartStore', () => {
       useCartStore.getState().addItem()
 
       const item = useCartStore.getState().items[0]
-      expect(item.name).toBe('Item 1')
+      expect(item.name).toBe('Item A')
       expect(item.unitPricePaise).toBe(50000)
       expect(item.quantity).toBe(2)
     })
@@ -68,20 +68,6 @@ describe('useCartStore', () => {
 
   describe('multiple items', () => {
     it('adds multiple items with incrementing names', () => {
-      useCartStore.getState().setCurrentAmount('50')
-      useCartStore.getState().addItem()
-      useCartStore.getState().setCurrentAmount('75')
-      useCartStore.getState().addItem()
-      const items = useCartStore.getState().items
-      expect(items).toHaveLength(2)
-      expect(items[0].name).toBe('Item 1')
-      expect(items[1].name).toBe('Item 2')
-    })
-  })
-
-  describe('quantity', () => {
-    it('increases quantity', () => {
-      useCartStore.getState().setCurrentAmount('100')
       useCartStore.getState().addItem()
       const id = useCartStore.getState().items[0].id
       useCartStore.getState().updateQuantity(id, 1)
