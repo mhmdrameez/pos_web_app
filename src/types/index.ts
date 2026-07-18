@@ -34,10 +34,18 @@ export interface CompletedSale extends SavedOrder {
   amountPaidPaise?: number
   changePaise?: number
   completedAt: number
+  emailSentAt?: number
+}
+
+export interface EmailSettings {
+  resendApiKey: string
+  fromEmail: string
+  toEmail: string
 }
 
 export interface AppSettings {
   businessName: string
+  emailSettings?: EmailSettings
 }
 
 export interface PrinterSettings {

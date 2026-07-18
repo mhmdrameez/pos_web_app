@@ -131,6 +131,26 @@ export async function saveCompletedSale(sale: CompletedSale): Promise<void> {
   saveCompletedSalesBackup(sales)
 }
 
+export async function getSalesByDateRange(
+  fromTs: number,
+  toTs: number,
+): Promise<CompletedSale[]> {
+  return db.completedSales
+    .where('completedAt')
+    .between(fromTs, toTs, true, true)
+    .reverse()
+    .sortBy('completedAt')
+}
+
+export async function markEmailSent(saleId: string, sentAt: number): Promise<void> {
+  await db.completedSales.where('id').equals(saleId).modify({ emailSentAt: sentAt })
+  // Update backup too
+  const backup = getCompletedSalesBackup().map((s) =>
+    s.id === saleId ? { ...s, emailSentAt: sentAt } : s,
+  )
+  saveCompletedSalesBackup(backup)
+}
+
 export async function getNextInvoiceNumber(): Promise<string> {
   const counter = await db.counters.get('default')
   const next = (counter?.invoiceSequence ?? 0) + 1
