@@ -56,6 +56,12 @@ export default defineConfig({
     setupFiles: './src/test/setup.ts',
   },
   server: {
-    allowedHosts: true
-  }
+    allowedHosts: true,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+    },
+  },
 })

@@ -1,7 +1,5 @@
 import type { CompletedSale, EmailSettings } from '../../types'
 
-const RESEND_API_URL = 'https://api.resend.com/emails'
-
 export interface EmailResult {
   success: boolean
   error?: string
@@ -263,28 +261,32 @@ async function sendViaResend(
   },
 ): Promise<EmailResult> {
   try {
-    const response = await fetch(RESEND_API_URL, {
+    const response = await fetch('/api/send-email', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(payload),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        apiKey,
+        from: payload.from,
+        to: payload.to[0],
+        subject: payload.subject,
+        html: payload.html,
+      }),
     })
 
+    const data = (await response.json().catch(() => ({}))) as { error?: string; success?: boolean }
+
     if (!response.ok) {
-      const body = (await response.json().catch(() => ({}))) as { message?: string }
-      return {
-        success: false,
-        error: body.message ?? `Resend API error (${response.status})`,
-      }
+      return { success: false, error: data.error ?? `Email server error (${response.status})` }
     }
 
     return { success: true }
   } catch (err) {
     return {
       success: false,
-      error: err instanceof Error ? err.message : 'Network error sending email',
+      error:
+        err instanceof Error
+          ? err.message
+          : 'Could not reach email server. Make sure the API server is running (npm run dev).',
     }
   }
 }
