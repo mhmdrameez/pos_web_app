@@ -4,7 +4,6 @@ import { getPrinterSettings, savePrinterSettings } from '../services/db/database
 import { useAppStore } from '../stores/useAppStore'
 import { useCartStore } from '../stores/useCartStore'
 import { usePrinterStore } from '../stores/usePrinterStore'
-import { printerService } from '../services/printer/PrinterService'
 
 export function usePersistence() {
   const setDbReady = useAppStore((s) => s.setDbReady)
