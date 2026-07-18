@@ -1,4 +1,5 @@
 import { Printer, Receipt, ShoppingCart } from 'lucide-react'
+import { useState } from 'react'
 import { useCartStore } from '../../stores/useCartStore'
 import { useAppStore } from '../../stores/useAppStore'
 import { useCheckout } from '../../hooks/useCheckout'
@@ -16,14 +17,21 @@ export function OrderPanel({ className = '' }: OrderPanelProps) {
   const openCheckoutModal = useAppStore((s) => s.openCheckoutModal)
   const addToast = useAppStore((s) => s.addToast)
   const { completeSale } = useCheckout()
+  const [isPrinting, setIsPrinting] = useState(false)
 
   // Print = save the sale immediately as cash + print receipt, no modal
   async function handlePrintAndSave() {
+    if (isPrinting) return
     if (items.length === 0) {
       addToast('error', 'Add items before printing')
       return
     }
-    await completeSale('cash', grandTotal, true)
+    setIsPrinting(true)
+    try {
+      await completeSale('cash', grandTotal, true)
+    } finally {
+      setIsPrinting(false)
+    }
   }
 
   return (
@@ -72,10 +80,11 @@ export function OrderPanel({ className = '' }: OrderPanelProps) {
           <Button
             variant="secondary"
             onClick={handlePrintAndSave}
-            className="flex items-center justify-center gap-1.5 py-2 text-sm"
+            disabled={isPrinting}
+            className="flex items-center justify-center gap-1.5 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Printer className="w-4 h-4" />
-            Print
+            {isPrinting ? 'Printing...' : 'Print'}
           </Button>
           <Button
             variant="primary"
