@@ -13,7 +13,6 @@ export function PrinterSettingsModal() {
   const businessName = useAppStore((s) => s.businessName)
 
   const paperWidth = usePrinterStore((s) => s.paperWidth)
-  const deviceId = usePrinterStore((s) => s.deviceId)
   const deviceName = usePrinterStore((s) => s.deviceName)
   const status = usePrinterStore((s) => s.status)
   const lastError = usePrinterStore((s) => s.lastError)
@@ -30,7 +29,7 @@ export function PrinterSettingsModal() {
     usePrinterStore.getState().setIsSupported(printerService.isSupported())
   }, [])
 
-  async function handleConnect(useSavedPrinter = true) {
+  async function handleConnect() {
     if (!isSupported) {
       addToast('error', 'Web Bluetooth is not supported. Use Chrome or Edge on Android/desktop.')
       return
@@ -41,9 +40,7 @@ export function PrinterSettingsModal() {
     setLastError(null)
 
     try {
-      const name = deviceId && useSavedPrinter
-        ? await printerService.reconnect(deviceId)
-        : await printerService.connect()
+      const name = await printerService.connect()
       setDevice(printerService.getDeviceId() ?? undefined, name ?? 'BLE Printer')
       setStatus('connected')
       addToast('success', `Connected to ${name ?? 'printer'}`)
@@ -142,33 +139,19 @@ export function PrinterSettingsModal() {
           {status !== 'connected' ? (
             <Button
               variant="primary"
-              onClick={() => handleConnect()}
+              onClick={handleConnect}
               disabled={!isSupported || isConnecting}
               className="flex items-center justify-center gap-2"
             >
               <Bluetooth className="w-4 h-4" />
-              {isConnecting
-                ? 'Connecting...'
-                : deviceId
-                  ? `Reconnect ${deviceName ?? 'saved printer'}`
-                  : 'Connect Printer'}
+              {isConnecting ? 'Connecting...' : 'Connect Printer'}
             </Button>
           ) : (
             <Button variant="secondary" onClick={handleDisconnect}>
               Disconnect
             </Button>
           )}
-          {status !== 'connected' && deviceId && (
-            <Button
-              variant="secondary"
-              onClick={() => handleConnect(false)}
-              disabled={!isSupported || isConnecting}
-              className="flex items-center justify-center gap-2"
-            >
-              <Bluetooth className="w-4 h-4" />
-              Choose Another Printer
-            </Button>
-          )}
+          
           <Button
             variant="secondary"
             onClick={handleTestPrint}
