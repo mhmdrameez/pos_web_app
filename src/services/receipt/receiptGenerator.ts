@@ -84,10 +84,8 @@ export function generateReceiptText(data: ReceiptData, paperWidth: 58 | 80 = 58)
     lines.push(row(`${item.name} x${item.quantity}`, item.lineTotal))
   }
   lines.push('-'.repeat(width))
-  const totalQuantity = data.items.reduce((sum, item) => sum + item.quantity, 0)
-  const totalQtyDisplay = Number.isInteger(totalQuantity)
-    ? totalQuantity.toString()
-    : totalQuantity.toFixed(2).replace(/\.?0+$/, '')
+  const totalQuantity = data.items.reduce((sum, item) => sum + (Number.isInteger(item.quantity) ? item.quantity : 1), 0)
+  const totalQtyDisplay = totalQuantity.toString()
   lines.push(row('Total Qty', totalQtyDisplay))
   if (data.hasDiscount) {
     lines.push(row('Subtotal', data.subtotal))
