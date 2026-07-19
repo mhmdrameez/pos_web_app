@@ -57,9 +57,11 @@ describe('money utilities', () => {
       expect(parseAmountAndQuantity('65*3')).toEqual({ unitPricePaise: 6500, quantity: 3 })
     })
 
-    it('rejects decimal quantity', () => {
-      expect(parseAmountAndQuantity('65*3.5')).toBeNull()
-      expect(parseAmountAndQuantity('65*2.50')).toBeNull()
+    it('treats decimal quantity as 1 (e.g. 2.0, 4.50, 3.5)', () => {
+      expect(parseAmountAndQuantity('65*3.5')).toEqual({ unitPricePaise: 6500, quantity: 1 })
+      expect(parseAmountAndQuantity('65*2.50')).toEqual({ unitPricePaise: 6500, quantity: 1 })
+      expect(parseAmountAndQuantity('65*4.00')).toEqual({ unitPricePaise: 6500, quantity: 1 })
+      expect(parseAmountAndQuantity('65*2.0')).toEqual({ unitPricePaise: 6500, quantity: 1 })
     })
 
     it('returns null for zero quantity', () => {

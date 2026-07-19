@@ -182,5 +182,6 @@ export const useCartStore = create<CartState>((set, get) => ({
     return calculateGrandTotal(subtotal, get().discountPaise)
   },
 
-  getItemCount: () => get().items.reduce((sum, item) => sum + item.quantity, 0),
+  getItemCount: () =>
+    get().items.reduce((sum, item) => sum + (Number.isInteger(item.quantity) ? item.quantity : 1), 0),
 }))
