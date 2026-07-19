@@ -29,7 +29,11 @@ export function parseAmountInput(current: string, input: string): string {
   }
 
   const [amount, quantity] = current.split('*')
-  const activePart = quantity === undefined ? amount : quantity
+  const inQuantityPart = quantity !== undefined
+  const activePart = inQuantityPart ? quantity : amount
+
+  // Block decimal point and '00' entirely in the quantity part
+  if (inQuantityPart && (input === '.' || input === '00')) return current
 
   if (input === '00') {
     if (!activePart || activePart === '0') return current ? `${current}0` : '0'
@@ -46,7 +50,7 @@ export function parseAmountInput(current: string, input: string): string {
   if (!digit) return current
 
   if (activePart === '0' && !activePart.includes('.')) {
-    if (quantity === undefined) return digit
+    if (!inQuantityPart) return digit
     return `${amount}*${digit}`
   }
 
@@ -63,7 +67,7 @@ export function parseAmountAndQuantity(input: string): { unitPricePaise: number;
 
   const unitPricePaise = amountStringToPaise(amount)
   const quantity = quantityInput === undefined ? 1 : Number(quantityInput)
-  if (unitPricePaise <= 0 || isNaN(quantity) || quantity <= 0) return null
+  if (unitPricePaise <= 0 || !Number.isInteger(quantity) || quantity <= 0) return null
 
   return { unitPricePaise, quantity }
 }

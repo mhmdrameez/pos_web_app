@@ -23,8 +23,6 @@ export function OrderItemRow({ id, name, unitPricePaise, quantity }: OrderItemRo
     }
   }
 
-  const isDecimalQty = !Number.isInteger(quantity)
-
   return (
     <div className="flex items-center gap-2 py-3 border-b border-gray-100 last:border-0">
       <div className="flex-1 min-w-0">
@@ -40,19 +38,15 @@ export function OrderItemRow({ id, name, unitPricePaise, quantity }: OrderItemRo
       <div className="flex items-center gap-1">
         <button
           onClick={handleDecrease}
-          disabled={isDecimalQty}
-          className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center hover:bg-gray-200"
           aria-label="Decrease quantity"
         >
           <Minus className="w-4 h-4" />
         </button>
-        <span className="w-10 text-center font-semibold tabular-nums text-sm">
-          {Number.isInteger(quantity) ? quantity : quantity.toFixed(2)}
-        </span>
+        <span className="w-8 text-center font-semibold tabular-nums">{quantity}</span>
         <button
           onClick={() => updateQuantity(id, 1)}
-          disabled={isDecimalQty}
-          className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center hover:bg-gray-200"
           aria-label="Increase quantity"
         >
           <Plus className="w-4 h-4" />

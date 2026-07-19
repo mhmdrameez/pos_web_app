@@ -62,7 +62,7 @@ export function CheckoutModal() {
           </div>
           <div className="flex justify-between text-sm border-t border-gray-200 pt-3">
             <span className="text-gray-500">{itemCount} line item{itemCount !== 1 ? 's' : ''}</span>
-            <span className="font-semibold text-gray-700">Total Qty: <span className="tabular-nums">{Number.isInteger(totalQty) ? totalQty : totalQty.toFixed(2).replace(/\.?0+$/, '')}</span></span>
+            <span className="font-semibold text-gray-700">Total Qty: <span className="tabular-nums">{totalQty}</span></span>
           </div>
         </div>
 

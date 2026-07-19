@@ -35,19 +35,6 @@ describe('receipt printing', () => {
     expect(generateReceiptText(generateReceiptData(preview, 'Quick Sale'))).not.toContain('PREVIEW')
   })
 
-  it('formats decimal quantity cleanly on receipt', () => {
-    const decimalSale: CompletedSale = {
-      ...sale,
-      items: [{ id: 'item-2', name: 'Rice', unitPricePaise: 3000, quantity: 2.5 }],
-      subtotalPaise: 7500,
-      grandTotalPaise: 7500,
-    }
-    const text = generateReceiptText(generateReceiptData(decimalSale, 'Quick Sale'))
-
-    expect(text).toContain('x2.5')
-    expect(text).toContain('Total Qty: 2.5')
-  })
-
   it('selects the standard printer font and avoids UTF-8 multi-byte output', () => {
     const bytes = new EscPosEncoder().text('Rs.500.00 * 2').encode()
 

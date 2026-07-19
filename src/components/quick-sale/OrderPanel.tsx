@@ -72,9 +72,7 @@ export function OrderPanel({ className = '' }: OrderPanelProps) {
         <div className="space-y-1.5 mb-3">
           <div className="flex justify-between items-center text-sm text-gray-600">
             <span>Total Qty</span>
-            <span className="font-semibold tabular-nums">
-              {Number.isInteger(totalQty) ? totalQty : totalQty.toFixed(2).replace(/\.?0+$/, '')}
-            </span>
+            <span className="font-semibold tabular-nums">{totalQty}</span>
           </div>
           <div className="flex justify-between items-center font-bold text-gray-900">
             <span className="text-sm">Grand Total</span>
