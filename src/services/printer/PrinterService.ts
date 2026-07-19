@@ -103,7 +103,14 @@ export class PrinterService {
   encoder.separator()
 
   // Totals
+  const totalQuantity = data.items.reduce((sum, item) => sum + item.quantity, 0)
+  const totalQtyDisplay = Number.isInteger(totalQuantity)
+    ? totalQuantity.toString()
+    : totalQuantity.toFixed(2).replace(/\.?0+$/, '')
+  encoder.tableRow('Total Qty', totalQtyDisplay)
+
   if (data.hasDiscount) {
+    encoder.tableRow('Subtotal', data.subtotal)
     encoder.tableRow('Discount', `-${data.discount}`)
   }
   encoder.bold(true).tableRow('TOTAL', data.grandTotal).bold(false)
