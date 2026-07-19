@@ -12,6 +12,8 @@ export function CheckoutModal() {
   const closeCheckoutModal = useAppStore((s) => s.closeCheckoutModal)
   const addToast = useAppStore((s) => s.addToast)
   const grandTotal = useCartStore((s) => s.getGrandTotalPaise())
+  const totalQty = useCartStore((s) => s.getItemCount())
+  const itemCount = useCartStore((s) => s.items.length)
   const { completeSale } = useCheckout()
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
@@ -53,9 +55,15 @@ export function CheckoutModal() {
   return (
     <Modal open={isOpen} onClose={closeCheckoutModal} title="Checkout" size="md">
       <div className="space-y-4">
-        <div className="bg-gray-50 rounded-xl p-4 text-center">
-          <p className="text-sm text-gray-500">Amount Due</p>
-          <p className="text-3xl font-bold text-gray-900 tabular-nums">{formatRupees(grandTotal)}</p>
+        <div className="bg-gray-50 rounded-xl p-4">
+          <div className="text-center mb-3">
+            <p className="text-sm text-gray-500">Amount Due</p>
+            <p className="text-3xl font-bold text-gray-900 tabular-nums">{formatRupees(grandTotal)}</p>
+          </div>
+          <div className="flex justify-between text-sm border-t border-gray-200 pt-3">
+            <span className="text-gray-500">{itemCount} line item{itemCount !== 1 ? 's' : ''}</span>
+            <span className="font-semibold text-gray-700">Total Qty: <span className="tabular-nums">{Number.isInteger(totalQty) ? totalQty : totalQty.toFixed(2).replace(/\.?0+$/, '')}</span></span>
+          </div>
         </div>
 
         <div>

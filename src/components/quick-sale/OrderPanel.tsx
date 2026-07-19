@@ -14,6 +14,7 @@ interface OrderPanelProps {
 export function OrderPanel({ className = '' }: OrderPanelProps) {
   const items = useCartStore((s) => s.items)
   const grandTotal = useCartStore((s) => s.getGrandTotalPaise())
+  const totalQty = useCartStore((s) => s.getItemCount())
   const openCheckoutModal = useAppStore((s) => s.openCheckoutModal)
   const addToast = useAppStore((s) => s.addToast)
   const { completeSale } = useCheckout()
@@ -67,12 +68,20 @@ export function OrderPanel({ className = '' }: OrderPanelProps) {
 
       {/* Footer — total + 2 compact buttons */}
       <div className="shrink-0 bg-[#e9ebef] px-4 pt-3 pb-3 border-t border-gray-200">
-        {/* Grand total */}
-        <div className="flex justify-between items-center font-bold text-gray-900 mb-3">
-          <span className="text-sm">Grand Total</span>
-          <span className="text-lg tabular-nums">
-            {grandTotal > 0 ? formatRupees(grandTotal) : '₹0'}
-          </span>
+        {/* Total Qty + Grand total */}
+        <div className="space-y-1.5 mb-3">
+          <div className="flex justify-between items-center text-sm text-gray-600">
+            <span>Total Qty</span>
+            <span className="font-semibold tabular-nums">
+              {Number.isInteger(totalQty) ? totalQty : totalQty.toFixed(2).replace(/\.?0+$/, '')}
+            </span>
+          </div>
+          <div className="flex justify-between items-center font-bold text-gray-900">
+            <span className="text-sm">Grand Total</span>
+            <span className="text-lg tabular-nums">
+              {grandTotal > 0 ? formatRupees(grandTotal) : '₹0'}
+            </span>
+          </div>
         </div>
 
         {/* Two compact action buttons */}

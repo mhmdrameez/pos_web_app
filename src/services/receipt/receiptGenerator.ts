@@ -94,15 +94,21 @@ export function generateReceiptText(data: ReceiptData, paperWidth: 58 | 80 = 58)
 
   lines.push('-'.repeat(width))
   for (const item of data.items) {
-    lines.push(row(`${item.name} x${item.quantity}`, item.lineTotal))
+    const qtyDisplay = Number.isInteger(item.quantity)
+      ? item.quantity.toString()
+      : item.quantity.toFixed(2).replace(/\.?0+$/, '')
+    lines.push(row(`${item.name} x${qtyDisplay}`, item.lineTotal))
   }
   lines.push('-'.repeat(width))
-  
   const totalQuantity = data.items.reduce((sum, item) => sum + item.quantity, 0)
-  lines.push(row('Total Qty', totalQuantity.toString()))
-  
+  const totalQtyDisplay = Number.isInteger(totalQuantity)
+    ? totalQuantity.toString()
+    : totalQuantity.toFixed(2).replace(/\.?0+$/, '')
+  lines.push(row(`Total Qty: ${totalQtyDisplay}`, data.subtotal))
   if (data.hasDiscount) lines.push(row('Discount', `-${data.discount}`))
+  lines.push('='.repeat(width))
   lines.push(row('TOTAL', data.grandTotal))
+  lines.push('='.repeat(width))
   lines.push('')
   lines.push(`Payment: ${data.paymentMethod}`)
   if (data.amountPaid) lines.push(`Paid: ${data.amountPaid}`)
