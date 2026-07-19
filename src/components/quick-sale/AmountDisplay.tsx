@@ -17,9 +17,7 @@ export function AmountDisplay() {
   // Total when both price and qty are present
   const total =
     entry && hasMultiply && qtyStr !== ''
-      ? priceStr.includes('.')
-        ? formatRupees(entry.unitPricePaise * entry.quantity)
-        : formatRupeesFromString(String((entry.unitPricePaise * entry.quantity) / 100))
+      ? formatRupees(Math.round(entry.unitPricePaise * entry.quantity))
       : null
 
   return (

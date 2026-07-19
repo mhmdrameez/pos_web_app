@@ -28,7 +28,7 @@ describe('useCartStore', () => {
       useCartStore.getState().addItem()
       const items = useCartStore.getState().items
       expect(items).toHaveLength(1)
-      expect(items[0].name).toBe('100 × 1')
+      expect(items[0].name).toBe('100 x 1')
       expect(items[0].unitPricePaise).toBe(10000)
       expect(items[0].quantity).toBe(1)
     })
@@ -51,7 +51,7 @@ describe('useCartStore', () => {
       useCartStore.getState().addItem()
 
       const item = useCartStore.getState().items[0]
-      expect(item.name).toBe('500 × 2')
+      expect(item.name).toBe('500 x 2')
       expect(item.unitPricePaise).toBe(50000)
       expect(item.quantity).toBe(2)
     })
@@ -74,8 +74,8 @@ describe('useCartStore', () => {
       useCartStore.getState().addItem()
       const items = useCartStore.getState().items
       expect(items).toHaveLength(2)
-      expect(items[0].name).toBe('50 × 1')
-      expect(items[1].name).toBe('75 × 1')
+      expect(items[0].name).toBe('50 x 1')
+      expect(items[1].name).toBe('75 x 1')
     })
   })
 

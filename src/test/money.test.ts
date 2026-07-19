@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   parseAmountInput,
+  parseAmountAndQuantity,
   amountStringToPaise,
   calculateSubtotal,
   calculateGrandTotal,
@@ -34,6 +35,36 @@ describe('money utilities', () => {
 
     it('handles 00 suffix', () => {
       expect(parseAmountInput('1', '00')).toBe('100')
+    })
+
+    it('allows decimal quantity after *', () => {
+      expect(parseAmountInput('65*3.5', '0')).toBe('65*3.50')
+    })
+
+    it('limits quantity decimal to 2 places', () => {
+      expect(parseAmountInput('65*3.50', '1')).toBe('65*3.50')
+    })
+
+    it('prevents second decimal in quantity', () => {
+      expect(parseAmountInput('65*3.5', '.')).toBe('65*3.5')
+    })
+  })
+
+  describe('parseAmountAndQuantity', () => {
+    it('parses integer quantity', () => {
+      expect(parseAmountAndQuantity('65*3')).toEqual({ unitPricePaise: 6500, quantity: 3 })
+    })
+
+    it('parses decimal quantity like 3.5', () => {
+      expect(parseAmountAndQuantity('65*3.5')).toEqual({ unitPricePaise: 6500, quantity: 3.5 })
+    })
+
+    it('parses decimal quantity like 3.50', () => {
+      expect(parseAmountAndQuantity('65*3.50')).toEqual({ unitPricePaise: 6500, quantity: 3.5 })
+    })
+
+    it('returns null for zero quantity', () => {
+      expect(parseAmountAndQuantity('65*0')).toBeNull()
     })
   })
 

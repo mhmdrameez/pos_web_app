@@ -50,10 +50,6 @@ export function parseAmountInput(current: string, input: string): string {
     return `${amount}*${digit}`
   }
 
-  if (quantity !== undefined && activePart.length >= 3) {
-    return current
-  }
-
   const next = current + digit
   const activeNext = next.split('*').at(-1) ?? ''
   const parts = activeNext.split('.')
@@ -67,7 +63,7 @@ export function parseAmountAndQuantity(input: string): { unitPricePaise: number;
 
   const unitPricePaise = amountStringToPaise(amount)
   const quantity = quantityInput === undefined ? 1 : Number(quantityInput)
-  if (unitPricePaise <= 0 || !Number.isInteger(quantity) || quantity <= 0) return null
+  if (unitPricePaise <= 0 || isNaN(quantity) || quantity <= 0) return null
 
   return { unitPricePaise, quantity }
 }
