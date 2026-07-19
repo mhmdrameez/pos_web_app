@@ -1,26 +1,17 @@
-import type { CompletedSale } from '../../types'
-function formatReceiptAmount(paise: number): string {
-  return `Rs.${(paise / 100).toLocaleString('en-IN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`
+import type { CartItem, CompletedSale, Customer } from '../../types'
+import { formatRupees } from '../../utils/money'
+
+export interface ReceiptItem {
+  name: string
+  quantity: number
+  lineTotal: string
 }
 
 export interface ReceiptData {
   businessName: string
   invoiceNumber: string
   date: string
-  customer?: {
-    name: string
-    phone: string
-    email?: string
-  }
-  items: {
-    name: string
-    quantity: number
-    unitPrice: string
-    lineTotal: string
-  }[]
+  items: ReceiptItem[]
   subtotal: string
   discount: string
   hasDiscount: boolean
@@ -28,42 +19,38 @@ export interface ReceiptData {
   paymentMethod: string
   amountPaid?: string
   change?: string
+  customer?: Customer | null
 }
 
-export function generateReceiptData(
-  sale: CompletedSale,
-  businessName: string,
-): ReceiptData {
-  const paymentLabels: Record<string, string> = {
-    cash: 'Cash',
-    upi: 'UPI',
-    card: 'Card',
-  }
+export function generateReceiptData(sale: CompletedSale, businessName: string): ReceiptData {
+  const items = sale.items.map((item) => ({
+    name: item.name,
+    quantity: item.quantity,
+    lineTotal: formatRupees(item.unitPricePaise * item.quantity).replace('₹', 'Rs.'),
+  }))
+
+  const dateStr = new Date(sale.completedAt || Date.now()).toLocaleString('en-IN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  })
 
   return {
     businessName,
     invoiceNumber: sale.invoiceNumber,
-    date: new Date(sale.completedAt).toLocaleString('en-IN'),
-    customer: sale.customer
-      ? {
-          name: sale.customer.name,
-          phone: sale.customer.phone,
-          email: sale.customer.email,
-        }
-      : undefined,
-    items: sale.items.map((item) => ({
-      name: item.name,
-      quantity: item.quantity,
-      unitPrice: formatReceiptAmount(item.unitPricePaise),
-      lineTotal: formatReceiptAmount(item.unitPricePaise * item.quantity),
-    })),
-    subtotal: formatReceiptAmount(sale.subtotalPaise),
-    discount: formatReceiptAmount(sale.discountPaise),
-    hasDiscount: sale.discountPaise > 0,
-    grandTotal: formatReceiptAmount(sale.grandTotalPaise),
-    paymentMethod: paymentLabels[sale.paymentMethod] ?? sale.paymentMethod,
-    amountPaid: sale.amountPaidPaise ? formatReceiptAmount(sale.amountPaidPaise) : undefined,
-    change: sale.changePaise ? formatReceiptAmount(sale.changePaise) : undefined,
+    date: dateStr,
+    items,
+    subtotal: formatRupees(sale.subtotalPaise).replace('₹', 'Rs.'),
+    discount: formatRupees(sale.discountPaise || 0).replace('₹', 'Rs.'),
+    hasDiscount: (sale.discountPaise || 0) > 0,
+    grandTotal: formatRupees(sale.grandTotalPaise).replace('₹', 'Rs.'),
+    paymentMethod: sale.paymentMethod.toUpperCase(),
+    amountPaid: sale.amountPaidPaise ? formatRupees(sale.amountPaidPaise).replace('₹', 'Rs.') : undefined,
+    change: sale.changePaise ? formatRupees(sale.changePaise).replace('₹', 'Rs.') : undefined,
+    customer: sale.customer,
   }
 }
 
@@ -98,8 +85,14 @@ export function generateReceiptText(data: ReceiptData, paperWidth: 58 | 80 = 58)
   }
   lines.push('-'.repeat(width))
   const totalQuantity = data.items.reduce((sum, item) => sum + item.quantity, 0)
-  lines.push(row(`Total Qty: ${totalQuantity}`, data.subtotal))
-  if (data.hasDiscount) lines.push(row('Discount', `-${data.discount}`))
+  const totalQtyDisplay = Number.isInteger(totalQuantity)
+    ? totalQuantity.toString()
+    : totalQuantity.toFixed(2).replace(/\.?0+$/, '')
+  lines.push(row('Total Qty', totalQtyDisplay))
+  if (data.hasDiscount) {
+    lines.push(row('Subtotal', data.subtotal))
+    lines.push(row('Discount', `-${data.discount}`))
+  }
   lines.push('='.repeat(width))
   lines.push(row('TOTAL', data.grandTotal))
   lines.push('='.repeat(width))

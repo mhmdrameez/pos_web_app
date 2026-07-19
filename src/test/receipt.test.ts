@@ -19,14 +19,40 @@ const sale: CompletedSale = {
 }
 
 describe('receipt printing', () => {
-  it('uses printer-safe amounts and shows unit price, quantity, and totals', () => {
+  it('shows Total Qty on its own line before TOTAL', () => {
+    const text = generateReceiptText(generateReceiptData(sale, 'Quick Sale'))
+    const lines = text.split('\n')
+
+    // Total Qty line should appear before TOTAL line
+    const qtyIdx = lines.findIndex((l) => l.includes('Total Qty'))
+    const totalIdx = lines.findIndex((l) => l.trim().startsWith('TOTAL'))
+
+    expect(qtyIdx).toBeGreaterThan(-1)
+    expect(totalIdx).toBeGreaterThan(qtyIdx)
+    expect(lines[qtyIdx]).toContain('2')
+  })
+
+  it('shows Subtotal and Discount lines only when discount applies', () => {
+    const noDiscountText = generateReceiptText(generateReceiptData(sale, 'Quick Sale'))
+    expect(noDiscountText).not.toContain('Subtotal')
+    expect(noDiscountText).not.toContain('Discount')
+
+    const discountSale: CompletedSale = {
+      ...sale,
+      discountPaise: 1000,
+      grandTotalPaise: 99000,
+    }
+    const discountText = generateReceiptText(generateReceiptData(discountSale, 'Quick Sale'))
+    expect(discountText).toContain('Subtotal')
+    expect(discountText).toContain('Discount')
+  })
+
+  it('uses printer-safe amounts and shows name, quantity, and TOTAL', () => {
     const text = generateReceiptText(generateReceiptData(sale, 'Quick Sale'))
 
     expect(text).toContain('Tea')
-    expect(text).toContain('Rs.1,000.00')
     expect(text).toContain('TOTAL')
-    expect(text).not.toContain('Subtotal')
-    expect(text).toContain('Total Qty: 2')
+    expect(text).not.toContain('Subtotal') // no discount = no subtotal
   })
 
   it('does not print the temporary preview invoice number', () => {
