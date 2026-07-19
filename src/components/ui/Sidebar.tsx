@@ -51,8 +51,13 @@ export function Sidebar() {
           </button>
         ))}
       </nav>
-      <div className="w-12 h-12 rounded-xl bg-primary text-white grid place-items-center text-[10px] font-bold tracking-tight">
-        POS
+      <div className="flex flex-col items-center gap-1">
+        <div className="w-12 h-12 rounded-xl bg-primary text-white grid place-items-center text-[10px] font-bold tracking-tight">
+          POS
+        </div>
+        <span className="text-[9px] text-gray-400 tabular-nums leading-none">
+          v{__APP_VERSION__}
+        </span>
       </div>
     </aside>
   )
