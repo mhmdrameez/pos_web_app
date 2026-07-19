@@ -69,8 +69,9 @@ export function parseAmountAndQuantity(input: string): { unitPricePaise: number;
   const parsed = quantityInput === undefined ? 1 : Number(quantityInput)
   if (unitPricePaise <= 0 || isNaN(parsed) || parsed <= 0) return null
 
-  // If quantity has a decimal part (e.g. 2.0, 4.50), treat it as 1
-  const quantity = Number.isInteger(parsed) ? parsed : 1
+  // If quantity string has a decimal point (e.g. '2.0', '4.50', '4.00'), treat as 1
+  const hasDecimal = quantityInput !== undefined && quantityInput.includes('.')
+  const quantity = hasDecimal ? 1 : parsed
 
   return { unitPricePaise, quantity }
 }
