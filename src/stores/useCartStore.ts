@@ -182,6 +182,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     return calculateGrandTotal(subtotal, get().discountPaise)
   },
 
+  // Decimal quantities (e.g. 2.5 kg) count as 1 in total qty display
   getItemCount: () =>
     get().items.reduce((sum, item) => sum + (Number.isInteger(item.quantity) ? item.quantity : 1), 0),
 }))

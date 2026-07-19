@@ -37,18 +37,22 @@ describe('money utilities', () => {
       expect(parseAmountInput('1', '00')).toBe('100')
     })
 
-    it('blocks decimal point in quantity part', () => {
-      // After *, decimal should not be allowed
-      expect(parseAmountInput('65*3', '.')).toBe('65*3')
+    it('allows decimal quantity after * (e.g. 30*2.50)', () => {
+      expect(parseAmountInput('30*2', '.')).toBe('30*2.')
+      expect(parseAmountInput('30*2.', '5')).toBe('30*2.5')
+      expect(parseAmountInput('30*2.5', '0')).toBe('30*2.50')
+    })
+
+    it('limits quantity decimal to 2 places', () => {
+      expect(parseAmountInput('30*2.50', '1')).toBe('30*2.50')
+    })
+
+    it('prevents second decimal in quantity', () => {
+      expect(parseAmountInput('30*2.5', '.')).toBe('30*2.5')
     })
 
     it('blocks 00 in quantity part', () => {
       expect(parseAmountInput('65*3', '00')).toBe('65*3')
-    })
-
-    it('allows integer quantity after *', () => {
-      expect(parseAmountInput('65*', '3')).toBe('65*3')
-      expect(parseAmountInput('65*3', '5')).toBe('65*35')
     })
   })
 
@@ -57,19 +61,20 @@ describe('money utilities', () => {
       expect(parseAmountAndQuantity('65*3')).toEqual({ unitPricePaise: 6500, quantity: 3 })
     })
 
-    it('treats decimal quantity as 1 (e.g. 2.0, 4.50, 3.5)', () => {
-      expect(parseAmountAndQuantity('65*3.5')).toEqual({ unitPricePaise: 6500, quantity: 1 })
-      expect(parseAmountAndQuantity('65*2.50')).toEqual({ unitPricePaise: 6500, quantity: 1 })
-      expect(parseAmountAndQuantity('65*4.00')).toEqual({ unitPricePaise: 6500, quantity: 1 })
-      expect(parseAmountAndQuantity('65*2.0')).toEqual({ unitPricePaise: 6500, quantity: 1 })
+    it('parses decimal quantity like 30*2.50', () => {
+      expect(parseAmountAndQuantity('30*2.50')).toEqual({ unitPricePaise: 3000, quantity: 2.5 })
+    })
+
+    it('parses decimal quantity like 30*2.75', () => {
+      expect(parseAmountAndQuantity('30*2.75')).toEqual({ unitPricePaise: 3000, quantity: 2.75 })
     })
 
     it('returns null for zero quantity', () => {
       expect(parseAmountAndQuantity('65*0')).toBeNull()
     })
 
-    it('allows decimal price with integer quantity', () => {
-      expect(parseAmountAndQuantity('30.50*2')).toEqual({ unitPricePaise: 3050, quantity: 2 })
+    it('allows decimal price with decimal quantity', () => {
+      expect(parseAmountAndQuantity('30.50*2.5')).toEqual({ unitPricePaise: 3050, quantity: 2.5 })
     })
   })
 

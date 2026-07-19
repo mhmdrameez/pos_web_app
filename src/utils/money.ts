@@ -32,8 +32,8 @@ export function parseAmountInput(current: string, input: string): string {
   const inQuantityPart = quantity !== undefined
   const activePart = inQuantityPart ? quantity : amount
 
-  // Block decimal point and '00' entirely in the quantity part
-  if (inQuantityPart && (input === '.' || input === '00')) return current
+  // Block '00' in the quantity part (e.g. 3*00 doesn't make sense)
+  if (inQuantityPart && input === '00') return current
 
   if (input === '00') {
     if (!activePart || activePart === '0') return current ? `${current}0` : '0'
@@ -66,12 +66,8 @@ export function parseAmountAndQuantity(input: string): { unitPricePaise: number;
   if (extra.length > 0 || !amount || quantityInput === '') return null
 
   const unitPricePaise = amountStringToPaise(amount)
-  const parsed = quantityInput === undefined ? 1 : Number(quantityInput)
-  if (unitPricePaise <= 0 || isNaN(parsed) || parsed <= 0) return null
-
-  // If quantity string has a decimal point (e.g. '2.0', '4.50', '4.00'), treat as 1
-  const hasDecimal = quantityInput !== undefined && quantityInput.includes('.')
-  const quantity = hasDecimal ? 1 : parsed
+  const quantity = quantityInput === undefined ? 1 : Number(quantityInput)
+  if (unitPricePaise <= 0 || isNaN(quantity) || quantity <= 0) return null
 
   return { unitPricePaise, quantity }
 }
