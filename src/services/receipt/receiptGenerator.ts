@@ -1,4 +1,4 @@
-import type { CartItem, CompletedSale, Customer } from '../../types'
+import type { CompletedSale, Customer } from '../../types'
 import { formatRupees } from '../../utils/money'
 
 export interface ReceiptItem {
