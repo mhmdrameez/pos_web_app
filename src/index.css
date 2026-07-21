@@ -16,6 +16,9 @@ body,
 #root {
   height: 100%;
   margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  overscroll-behavior-y: none;
 }
 
 body {
@@ -23,6 +26,7 @@ body {
   background: #f5f6fa;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
+  overscroll-behavior-y: none;
 }
 
 button {
