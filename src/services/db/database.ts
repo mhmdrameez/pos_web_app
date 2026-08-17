@@ -124,6 +124,10 @@ export async function getCompletedSales(): Promise<CompletedSale[]> {
   return []
 }
 
+export async function getCompletedSale(id: string): Promise<CompletedSale | undefined> {
+  return db.completedSales.get(id)
+}
+
 export async function saveCompletedSale(sale: CompletedSale): Promise<void> {
   await db.completedSales.put(sale)
   const sales = getCompletedSalesBackup().filter((storedSale) => storedSale.id !== sale.id)
