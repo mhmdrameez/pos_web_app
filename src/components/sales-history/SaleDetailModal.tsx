@@ -1,4 +1,4 @@
-import { XCircle } from 'lucide-react'
+import { XCircle, Pencil } from 'lucide-react'
 import type { CompletedSale } from '../../types'
 import { formatRupees } from '../../utils/money'
 import { Button } from '../ui/Button'
@@ -11,9 +11,10 @@ interface SaleDetailModalProps {
   open: boolean
   onClose: () => void
   onCancel?: (sale: CompletedSale) => void
+  onEdit?: (sale: CompletedSale) => void
 }
 
-export function SaleDetailModal({ sale, open, onClose, onCancel }: SaleDetailModalProps) {
+export function SaleDetailModal({ sale, open, onClose, onCancel, onEdit }: SaleDetailModalProps) {
   if (!sale) return null
 
   const isCancelled = sale.status === 'cancelled'
@@ -142,6 +143,17 @@ export function SaleDetailModal({ sale, open, onClose, onCancel }: SaleDetailMod
         )}
 
         <div className="flex gap-2 pt-2">
+          {!isCancelled && onEdit && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => onEdit(sale)}
+              className="flex items-center gap-1.5"
+            >
+              <Pencil className="w-4 h-4" />
+              Edit Bill
+            </Button>
+          )}
           {!isCancelled && onCancel && (
             <Button
               variant="danger"
