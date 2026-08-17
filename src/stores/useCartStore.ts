@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { CartItem, Customer } from '../types'
+import type { CartItem, CompletedSale, Customer } from '../types'
 import {
   calculateGrandTotal,
   calculateSubtotal,
@@ -33,6 +33,7 @@ interface CartState {
   customer: Customer | null
   discountPaise: number
   nextItemNumber: number
+  editingSale: CompletedSale | null
 
   setCurrentAmount: (amount: string) => void
   appendToAmount: (input: string) => void
@@ -45,6 +46,8 @@ interface CartState {
   setCustomer: (customer: Customer | null) => void
   setDiscountPaise: (paise: number) => void
   clearCart: () => void
+  startEditingSale: (sale: CompletedSale) => void
+  cancelEditingSale: () => void
   loadCart: (data: {
     items: CartItem[]
     customer?: Customer | null
@@ -69,6 +72,7 @@ export const useCartStore = create<CartState>((set, get) => ({
   customer: null,
   discountPaise: 0,
   nextItemNumber: 1,
+  editingSale: null,
 
   setCurrentAmount: (amount) => set({ currentAmount: amount }),
 
@@ -139,7 +143,26 @@ export const useCartStore = create<CartState>((set, get) => ({
       customer: null,
       discountPaise: 0,
       nextItemNumber: 1,
+      editingSale: null,
     }),
+
+  startEditingSale: (sale) => {
+    const migratedItems = sale.items.map((item) => ({
+      ...item,
+      name: item.name.replace(/\u00d7/g, 'x'),
+    }))
+
+    set({
+      items: migratedItems,
+      customer: sale.customer ?? null,
+      discountPaise: sale.discountPaise,
+      currentAmount: '',
+      nextItemNumber: migratedItems.length + 1,
+      editingSale: sale,
+    })
+  },
+
+  cancelEditingSale: () => set({ editingSale: null }),
 
   loadCart: (data) => {
     // Migrate old item names: replace Unicode × with plain x
