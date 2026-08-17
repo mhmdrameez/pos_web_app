@@ -151,6 +151,27 @@ export async function markEmailSent(saleId: string, sentAt: number): Promise<voi
   saveCompletedSalesBackup(backup)
 }
 
+export async function cancelCompletedSale(id: string): Promise<void> {
+  const sale = await db.completedSales.get(id)
+  if (!sale) {
+    throw new Error('Sale not found')
+  }
+  if (sale.status === 'cancelled') {
+    return
+  }
+
+  const updated: CompletedSale = {
+    ...sale,
+    status: 'cancelled',
+    updatedAt: Date.now(),
+  }
+
+  await db.completedSales.put(updated)
+
+  const backup = getCompletedSalesBackup().map((s) => (s.id === id ? updated : s))
+  saveCompletedSalesBackup(backup)
+}
+
 export async function getNextInvoiceNumber(): Promise<string> {
   const counter = await db.counters.get('default')
   const next = (counter?.invoiceSequence ?? 0) + 1
