@@ -8,14 +8,17 @@ import {
   ArrowUp,
   ArrowDown,
   Send,
+  Eye,
+  XCircle,
 } from 'lucide-react'
-import { getCompletedSales, markEmailSent, getSettings } from '../../services/db/database'
+import { getCompletedSales, markEmailSent, getSettings, cancelCompletedSale } from '../../services/db/database'
 import { sendInvoiceEmail } from '../../services/email/emailService'
 import { triggerDailyDigestNow } from '../../services/email/dailyDigestScheduler'
 import { useAppStore } from '../../stores/useAppStore'
 import type { CompletedSale } from '../../types'
 import { formatRupees } from '../../utils/money'
 import { Button } from '../ui/Button'
+import { SaleDetailModal } from './SaleDetailModal'
 
 const paymentLabels: Record<string, string> = { cash: 'Cash', upi: 'UPI', card: 'Card' }
 
@@ -35,8 +38,10 @@ export function SalesHistoryView() {
   const [digestSending, setDigestSending] = useState(false)
   const [emailConfigured, setEmailConfigured] = useState(false)
   const [filterDate, setFilterDate] = useState(getTodayDateStr)
+  const [selectedSale, setSelectedSale] = useState<CompletedSale | null>(null)
   const addToast = useAppStore((s) => s.addToast)
   const openAppSettings = useAppStore((s) => s.openAppSettings)
+  const showConfirm = useAppStore((s) => s.showConfirm)
 
   const load = useCallback(async () => {
     try {
@@ -116,6 +121,33 @@ export function SalesHistoryView() {
     } finally {
       setDigestSending(false)
     }
+  }
+
+  function handleViewSale(sale: CompletedSale) {
+    setSelectedSale(sale)
+  }
+
+  function handleCancelBill(sale: CompletedSale) {
+    showConfirm(
+      'Cancel Bill',
+      `Cancel invoice ${sale.invoiceNumber}? This cannot be undone.`,
+      async () => {
+        try {
+          await cancelCompletedSale(sale.id)
+          setSales((prev) =>
+            prev.map((s) =>
+              s.id === sale.id ? { ...s, status: 'cancelled', updatedAt: Date.now() } : s,
+            ),
+          )
+          setSelectedSale((prev) =>
+            prev?.id === sale.id ? { ...prev, status: 'cancelled', updatedAt: Date.now() } : prev,
+          )
+          addToast('success', `Invoice ${sale.invoiceNumber} cancelled`)
+        } catch {
+          addToast('error', 'Failed to cancel bill')
+        }
+      },
+    )
   }
 
   if (loading) {
@@ -225,6 +257,7 @@ export function SalesHistoryView() {
                 <th className="py-3 pr-4 font-medium">Customer</th>
                 <th className="py-3 pr-4 font-medium">Payment</th>
                 <th className="py-3 pr-4 font-medium text-right">Total</th>
+                <th className="py-3 pr-4 font-medium text-center">Actions</th>
                 <th className="py-3 pr-4 font-medium text-center">Email</th>
               </tr>
             </thead>
@@ -233,14 +266,24 @@ export function SalesHistoryView() {
                 const isThisSending = sendingId === sale.id
                 const hasError = sendErrorId === sale.id
                 const wasSent = !!sale.emailSentAt
+                const isCancelled = sale.status === 'cancelled'
 
                 return (
                   <tr
                     key={sale.id}
-                    className="border-b border-gray-50 hover:bg-gray-50/70 transition-colors"
+                    className={`border-b border-gray-50 hover:bg-gray-50/70 transition-colors ${isCancelled ? 'opacity-60' : ''}`}
                   >
                     <td className="py-3 pl-4 pr-4 font-medium text-gray-900">
-                      {sale.invoiceNumber}
+                      <div className="flex items-center gap-2">
+                        <span className={isCancelled ? 'line-through text-gray-500' : ''}>
+                          {sale.invoiceNumber}
+                        </span>
+                        {isCancelled && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-600">
+                            Cancelled
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-3 pr-4 text-gray-600 whitespace-nowrap">
                       {new Date(sale.completedAt).toLocaleString('en-IN')}
@@ -252,10 +295,38 @@ export function SalesHistoryView() {
                       </span>
                     </td>
                     <td className="py-3 pr-4 text-right font-semibold tabular-nums text-gray-900">
-                      {formatRupees(sale.grandTotalPaise)}
+                      <span className={isCancelled ? 'line-through text-gray-400' : ''}>
+                        {formatRupees(sale.grandTotalPaise)}
+                      </span>
                     </td>
                     <td className="py-3 pr-4 text-center">
-                      {isThisSending ? (
+                      <div className="inline-flex items-center gap-1">
+                        <button
+                          id={`view-sale-${sale.id}`}
+                          type="button"
+                          title="View bill details"
+                          onClick={() => handleViewSale(sale)}
+                          className="p-1 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        {!isCancelled && (
+                          <button
+                            id={`cancel-sale-${sale.id}`}
+                            type="button"
+                            title="Cancel bill"
+                            onClick={() => handleCancelBill(sale)}
+                            className="p-1 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3 pr-4 text-center">
+                      {isCancelled ? (
+                        <span className="text-xs text-gray-300">—</span>
+                      ) : isThisSending ? (
                         <Loader2 className="w-4 h-4 animate-spin text-indigo-400 mx-auto" />
                       ) : wasSent && !hasError ? (
                         <button
@@ -303,6 +374,13 @@ export function SalesHistoryView() {
           </table>
         </div>
       )}
+
+      <SaleDetailModal
+        sale={selectedSale}
+        open={!!selectedSale}
+        onClose={() => setSelectedSale(null)}
+        onCancel={handleCancelBill}
+      />
     </div>
   )
 }
