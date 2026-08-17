@@ -10,11 +10,13 @@ import {
   Send,
   Eye,
   XCircle,
+  Pencil,
 } from 'lucide-react'
 import { getCompletedSales, markEmailSent, getSettings, cancelCompletedSale } from '../../services/db/database'
 import { sendInvoiceEmail } from '../../services/email/emailService'
 import { triggerDailyDigestNow } from '../../services/email/dailyDigestScheduler'
 import { useAppStore } from '../../stores/useAppStore'
+import { useCartStore } from '../../stores/useCartStore'
 import type { CompletedSale } from '../../types'
 import { formatRupees } from '../../utils/money'
 import { Button } from '../ui/Button'
@@ -42,6 +44,9 @@ export function SalesHistoryView() {
   const addToast = useAppStore((s) => s.addToast)
   const openAppSettings = useAppStore((s) => s.openAppSettings)
   const showConfirm = useAppStore((s) => s.showConfirm)
+  const setActiveView = useAppStore((s) => s.setActiveSidebarView)
+  const startEditingSale = useCartStore((s) => s.startEditingSale)
+  const clearCart = useCartStore((s) => s.clearCart)
 
   const load = useCallback(async () => {
     try {
@@ -125,6 +130,29 @@ export function SalesHistoryView() {
 
   function handleViewSale(sale: CompletedSale) {
     setSelectedSale(sale)
+  }
+
+  function handleEditSale(sale: CompletedSale) {
+    const cartItems = useCartStore.getState().items
+    const editingSale = useCartStore.getState().editingSale
+
+    const doEdit = () => {
+      clearCart()
+      startEditingSale(sale)
+      setActiveView('quick-sale')
+      setSelectedSale(null)
+      addToast('info', `Editing ${sale.invoiceNumber} — make changes and save`)
+    }
+
+    if (cartItems.length > 0 || editingSale) {
+      showConfirm(
+        'Replace current order?',
+        'Loading this bill will replace the current cart.',
+        doEdit,
+      )
+    } else {
+      doEdit()
+    }
   }
 
   function handleCancelBill(sale: CompletedSale) {
@@ -312,6 +340,17 @@ export function SalesHistoryView() {
                         </button>
                         {!isCancelled && (
                           <button
+                            id={`edit-sale-${sale.id}`}
+                            type="button"
+                            title="Edit bill"
+                            onClick={() => handleEditSale(sale)}
+                            className="p-1 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                        )}
+                        {!isCancelled && (
+                          <button
                             id={`cancel-sale-${sale.id}`}
                             type="button"
                             title="Cancel bill"
@@ -380,6 +419,7 @@ export function SalesHistoryView() {
         open={!!selectedSale}
         onClose={() => setSelectedSale(null)}
         onCancel={handleCancelBill}
+        onEdit={handleEditSale}
       />
     </div>
   )
