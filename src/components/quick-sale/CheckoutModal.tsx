@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useCartStore } from '../../stores/useCartStore'
 import { useAppStore } from '../../stores/useAppStore'
 import { useCheckout } from '../../hooks/useCheckout'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
-import { formatRupees, amountStringToPaise, calculateChange } from '../../utils/money'
+import { formatRupees, amountStringToPaise, calculateChange, paiseToRupees } from '../../utils/money'
 import type { PaymentMethod } from '../../types'
 
 export function CheckoutModal() {
@@ -14,11 +14,27 @@ export function CheckoutModal() {
   const grandTotal = useCartStore((s) => s.getGrandTotalPaise())
   const totalQty = useCartStore((s) => s.getItemCount())
   const itemCount = useCartStore((s) => s.items.length)
+  const editingSale = useCartStore((s) => s.editingSale)
   const { completeSale } = useCheckout()
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
   const [cashAmount, setCashAmount] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
+
+  useEffect(() => {
+    if (!isOpen) return
+    if (editingSale) {
+      setPaymentMethod(editingSale.paymentMethod)
+      if (editingSale.paymentMethod === 'cash' && editingSale.amountPaidPaise != null) {
+        setCashAmount(String(paiseToRupees(editingSale.amountPaidPaise)))
+      } else {
+        setCashAmount('')
+      }
+    } else {
+      setPaymentMethod('cash')
+      setCashAmount('')
+    }
+  }, [isOpen, editingSale])
 
   const cashPaise = amountStringToPaise(cashAmount)
   const changePaise = calculateChange(cashPaise, grandTotal)
@@ -53,7 +69,12 @@ export function CheckoutModal() {
   ]
 
   return (
-    <Modal open={isOpen} onClose={closeCheckoutModal} title="Checkout" size="md">
+    <Modal
+      open={isOpen}
+      onClose={closeCheckoutModal}
+      title={editingSale ? `Update ${editingSale.invoiceNumber}` : 'Checkout'}
+      size="md"
+    >
       <div className="space-y-4">
         <div className="bg-gray-50 rounded-xl p-4">
           <div className="text-center mb-3">
@@ -122,7 +143,7 @@ export function CheckoutModal() {
             onClick={() => handleComplete(false)}
             className="w-full"
           >
-            Complete Sale
+            {editingSale ? 'Save Bill' : 'Complete Sale'}
           </Button>
           <Button
             variant="secondary"
@@ -131,7 +152,7 @@ export function CheckoutModal() {
             onClick={() => handleComplete(true)}
             className="w-full"
           >
-            Complete and Print
+            {editingSale ? 'Save and Print' : 'Complete and Print'}
           </Button>
         </div>
       </div>
