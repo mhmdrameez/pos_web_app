@@ -1,4 +1,4 @@
-import { Printer, Receipt, ShoppingCart } from 'lucide-react'
+import { Printer, Receipt, ShoppingCart, X } from 'lucide-react'
 import { useState } from 'react'
 import { useCartStore } from '../../stores/useCartStore'
 import { useAppStore } from '../../stores/useAppStore'
@@ -15,10 +15,20 @@ export function OrderPanel({ className = '' }: OrderPanelProps) {
   const items = useCartStore((s) => s.items)
   const grandTotal = useCartStore((s) => s.getGrandTotalPaise())
   const totalQty = useCartStore((s) => s.getItemCount())
+  const editingSale = useCartStore((s) => s.editingSale)
+  const clearCart = useCartStore((s) => s.clearCart)
   const openCheckoutModal = useAppStore((s) => s.openCheckoutModal)
   const addToast = useAppStore((s) => s.addToast)
+  const showConfirm = useAppStore((s) => s.showConfirm)
   const { completeSale } = useCheckout()
   const [isPrinting, setIsPrinting] = useState(false)
+
+  function handleCancelEdit() {
+    showConfirm('Discard edits?', 'This will clear the cart and stop editing this bill.', () => {
+      clearCart()
+      addToast('info', 'Edit cancelled')
+    })
+  }
 
   // Print = save the sale immediately as cash + print receipt, no modal
   async function handlePrintAndSave() {
@@ -39,9 +49,27 @@ export function OrderPanel({ className = '' }: OrderPanelProps) {
     <div className={`flex flex-col bg-[#f3f4f7] border-l border-gray-200 ${className}`}>
 
       {/* Header */}
-      <div className="flex items-center px-4 py-2.5 border-b border-gray-200 shrink-0">
-        <h2 className="font-semibold text-gray-900">Orders</h2>
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-200 shrink-0">
+        <h2 className="font-semibold text-gray-900">
+          {editingSale ? 'Editing Bill' : 'Orders'}
+        </h2>
+        {editingSale && (
+          <button
+            type="button"
+            onClick={handleCancelEdit}
+            className="p-1 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+            title="Cancel editing"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
+
+      {editingSale && (
+        <div className="mx-4 mt-3 rounded-lg bg-indigo-50 border border-indigo-100 px-3 py-2 text-sm text-indigo-800 shrink-0">
+          Editing <span className="font-semibold">{editingSale.invoiceNumber}</span>
+        </div>
+      )}
 
       {/* Item list — takes all available space */}
       <div className="flex-1 overflow-y-auto min-h-0 bg-[#e9ebef] px-4">
@@ -105,7 +133,7 @@ export function OrderPanel({ className = '' }: OrderPanelProps) {
             className="flex items-center justify-center gap-1.5 py-2 text-sm"
           >
             <Receipt className="w-4 h-4" />
-            Bill {grandTotal > 0 ? formatRupees(grandTotal) : ''}
+            {editingSale ? 'Save Bill' : 'Bill'} {grandTotal > 0 ? formatRupees(grandTotal) : ''}
           </Button>
         </div>
       </div>
