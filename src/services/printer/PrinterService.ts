@@ -7,6 +7,10 @@ import { WebBluetoothPrinter } from './WebBluetoothPrinter'
 
 export class PrinterService {
   private adapter: PrinterAdapter
+  private silentTimer: ReturnType<typeof setTimeout> | null = null
+  private silentStopped = true
+  private silentRunning = false
+  private visibilityHandler: (() => void) | null = null
 
   constructor(adapter?: PrinterAdapter) {
     this.adapter = adapter ?? new WebBluetoothPrinter()
@@ -18,6 +22,7 @@ export class PrinterService {
           store.setLastError(null)
         } else if (store.status === 'connected') {
           store.setStatus('disconnected')
+          if (!this.silentStopped) this.scheduleSilentRetry(1500)
         }
       })
     }
@@ -29,11 +34,13 @@ export class PrinterService {
 
   async connect(): Promise<string | null> {
     await this.adapter.connect()
+    this.startSilentAutoConnect()
     return this.adapter.getDeviceName()
   }
 
   async reconnect(deviceId: string): Promise<string | null> {
     await this.adapter.reconnect(deviceId)
+    this.startSilentAutoConnect()
     return this.adapter.getDeviceName()
   }
 
@@ -42,7 +49,72 @@ export class PrinterService {
   }
 
   async disconnect(): Promise<void> {
+    this.stopSilentAutoConnect()
     await this.adapter.disconnect()
+  }
+
+  // After the first browser pairing, later visits reconnect in the background.
+  // Never calls requestDevice() — that picker cannot be driven by a page script.
+  startSilentAutoConnect(): void {
+    this.silentStopped = false
+    this.bindSilentVisibility()
+    void this.runSilentAutoConnect()
+  }
+
+  stopSilentAutoConnect(): void {
+    this.silentStopped = true
+    if (this.silentTimer !== null) {
+      clearTimeout(this.silentTimer)
+      this.silentTimer = null
+    }
+  }
+
+  private bindSilentVisibility(): void {
+    if (this.visibilityHandler || typeof document === 'undefined') return
+    this.visibilityHandler = () => {
+      if (document.visibilityState === 'visible' && !this.silentStopped) {
+        void this.runSilentAutoConnect()
+      }
+    }
+    document.addEventListener('visibilitychange', this.visibilityHandler)
+  }
+
+  private scheduleSilentRetry(ms: number): void {
+    if (this.silentStopped) return
+    if (this.silentTimer !== null) clearTimeout(this.silentTimer)
+    this.silentTimer = setTimeout(() => {
+      this.silentTimer = null
+      void this.runSilentAutoConnect()
+    }, ms)
+  }
+
+  private async runSilentAutoConnect(): Promise<void> {
+    if (this.silentStopped || this.silentRunning) return
+    if (this.isConnected()) {
+      this.scheduleSilentRetry(30_000)
+      return
+    }
+
+    const store = usePrinterStore.getState()
+    const deviceId = store.deviceId
+    if (!deviceId) {
+      this.scheduleSilentRetry(15_000)
+      return
+    }
+
+    this.silentRunning = true
+    try {
+      const name = await this.adapter.reconnect(deviceId)
+      if (this.silentStopped) return
+      store.rememberPrinter(deviceId, name ?? store.deviceName ?? 'BLE Printer')
+      store.setStatus('connected')
+      store.setLastError(null)
+      this.scheduleSilentRetry(30_000)
+    } catch {
+      this.scheduleSilentRetry(5000)
+    } finally {
+      this.silentRunning = false
+    }
   }
 
   isConnected(): boolean {

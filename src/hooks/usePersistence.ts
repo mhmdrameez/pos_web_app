@@ -34,15 +34,7 @@ export function usePersistence() {
         setDbReady(true)
 
         if (printer.deviceId) {
-          try {
-            const name = await printerService.reconnect(printer.deviceId)
-            if (!mounted) return
-            const store = usePrinterStore.getState()
-            store.rememberPrinter(printer.deviceId, name ?? printer.deviceName ?? 'BLE Printer')
-            store.setStatus('connected')
-          } catch {
-            if (mounted) usePrinterStore.getState().setStatus('disconnected')
-          }
+          printerService.startSilentAutoConnect()
         }
       } catch {
         addToast('error', 'Failed to initialize database')
