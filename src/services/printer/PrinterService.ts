@@ -39,7 +39,10 @@ export class PrinterService {
   }
 
   async reconnect(deviceId: string): Promise<string | null> {
-    await this.adapter.reconnect(deviceId)
+    const store = usePrinterStore.getState()
+    const savedName =
+      store.pairedPrinters?.find((printer) => printer.id === deviceId)?.name ?? store.deviceName
+    await this.adapter.reconnect(deviceId, savedName)
     this.startSilentAutoConnect()
     return this.adapter.getDeviceName()
   }
@@ -104,9 +107,14 @@ export class PrinterService {
 
     this.silentRunning = true
     try {
-      const name = await this.adapter.reconnect(deviceId)
+      const savedName =
+        store.pairedPrinters?.find((printer) => printer.id === deviceId)?.name ?? store.deviceName
+      await this.adapter.reconnect(deviceId, savedName)
       if (this.silentStopped) return
-      store.rememberPrinter(deviceId, name ?? store.deviceName ?? 'BLE Printer')
+      store.rememberPrinter(
+        deviceId,
+        this.adapter.getDeviceName() ?? savedName ?? store.deviceName ?? 'BLE Printer',
+      )
       store.setStatus('connected')
       store.setLastError(null)
       this.scheduleSilentRetry(30_000)

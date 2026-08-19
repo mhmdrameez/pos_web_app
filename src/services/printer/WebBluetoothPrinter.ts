@@ -75,6 +75,30 @@ function isDeadConnectionError(error: unknown): boolean {
   )
 }
 
+const pairedDeviceCache = new Map<string, BluetoothDevice>()
+
+function rememberPairedDevice(device: BluetoothDevice): void {
+  pairedDeviceCache.set(device.id, device)
+}
+
+async function getPermittedBluetoothDevices(): Promise<BluetoothDevice[]> {
+  const bluetooth = navigator.bluetooth
+  if (!bluetooth) return [...pairedDeviceCache.values()]
+
+  const getDevices = bluetooth.getDevices
+  if (typeof getDevices === 'function') {
+    try {
+      const devices = await getDevices.call(bluetooth)
+      for (const device of devices) rememberPairedDevice(device)
+      return devices
+    } catch {
+      // Some browsers expose getDevices but throw; use the in-memory cache instead.
+    }
+  }
+
+  return [...pairedDeviceCache.values()]
+}
+
 export class WebBluetoothPrinter implements PrinterAdapter {
   private device: BluetoothDevice | null = null
   private characteristic: BluetoothRemoteGATTCharacteristic | null = null
@@ -118,22 +142,13 @@ export class WebBluetoothPrinter implements PrinterAdapter {
     }
   }
 
-  async reconnect(deviceId: string): Promise<void> {
+  async reconnect(deviceId: string, deviceName?: string): Promise<void> {
     if (!this.isSupported()) {
       throw new PrinterNotSupportedError()
     }
 
     try {
-      const bluetooth = navigator.bluetooth
-      if (!bluetooth?.getDevices) {
-        throw new PrinterConnectionError('Automatic reconnection is not supported by this browser')
-      }
-
-      const device = (await bluetooth.getDevices()).find((savedDevice) => savedDevice.id === deviceId)
-      if (!device) {
-        throw new PrinterConnectionError('Saved printer permission is no longer available')
-      }
-
+      const device = await this.resolvePairedDevice(deviceId, deviceName)
       this.userDisconnected = false
       await this.connectToDevice(device)
     } catch (error) {
@@ -141,19 +156,41 @@ export class WebBluetoothPrinter implements PrinterAdapter {
     }
   }
 
-  async listPairedPrinters(): Promise<{ id: string; name: string }[]> {
-    if (!this.isSupported()) return []
+  private async resolvePairedDevice(deviceId: string, deviceName?: string): Promise<BluetoothDevice> {
+    const cached = this.device?.id === deviceId ? this.device : pairedDeviceCache.get(deviceId)
+    if (cached?.gatt) return cached
+
+    const permitted = await getPermittedBluetoothDevices()
+    const fromPermission = permitted.find((savedDevice) => savedDevice.id === deviceId)
+    if (fromPermission?.gatt) return fromPermission
+
     const bluetooth = navigator.bluetooth
-    if (!bluetooth?.getDevices) return []
-    try {
-      const devices = await bluetooth.getDevices()
-      return devices.map((device) => ({
+    const canUseChooser = Boolean(navigator.userActivation?.isActive) && Boolean(bluetooth)
+    if (canUseChooser && deviceName && deviceName !== 'BLE Printer') {
+      const picked = await bluetooth!.requestDevice({
+        filters: [{ name: deviceName }],
+        optionalServices: PRINTER_SERVICE_UUIDS,
+      })
+      rememberPairedDevice(picked)
+      return picked
+    }
+
+    if (cached) return cached
+    throw new PrinterConnectionError(
+      'Printer not found. Pair it once with Connect Printer, then reconnect from the list.',
+    )
+  }
+
+  async listPairedPrinters(): Promise<{ id: string; name: string }[]> {
+    const devices = await getPermittedBluetoothDevices()
+    const byId = new Map<string, { id: string; name: string }>()
+    for (const device of devices) {
+      byId.set(device.id, {
         id: device.id,
         name: device.name?.trim() || 'BLE Printer',
-      }))
-    } catch {
-      return []
+      })
     }
+    return [...byId.values()]
   }
 
   private async connectToDevice(device: BluetoothDevice): Promise<void> {
@@ -209,6 +246,7 @@ export class WebBluetoothPrinter implements PrinterAdapter {
 
       this.device = device
       this.characteristic = characteristic
+      rememberPairedDevice(device)
       this.bindDisconnect(device)
       this.startKeepAlive()
       this.bindVisibilityResume()
@@ -366,7 +404,7 @@ export class WebBluetoothPrinter implements PrinterAdapter {
     if (this.device?.gatt?.connected) {
       this.device.gatt.disconnect()
     }
-    this.device = null
+    if (this.device) rememberPairedDevice(this.device)
     this.characteristic = null
     this.notifyConnection(false)
   }

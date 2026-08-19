@@ -37,6 +37,7 @@ interface BluetoothRemoteGATTCharacteristic {
 interface RequestDeviceOptions {
   acceptAllDevices?: boolean
   optionalServices?: string[]
+  filters?: Array<{ name?: string; namePrefix?: string; services?: string[] }>
 }
 
 interface Bluetooth {
@@ -46,4 +47,5 @@ interface Bluetooth {
 
 interface Navigator {
   bluetooth?: Bluetooth
+  userActivation?: { readonly isActive: boolean }
 }

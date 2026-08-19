@@ -6,7 +6,7 @@ export interface PairedPrinterInfo {
 export interface PrinterAdapter {
   isSupported(): boolean
   connect(): Promise<void>
-  reconnect(deviceId: string): Promise<void>
+  reconnect(deviceId: string, deviceName?: string): Promise<void>
   listPairedPrinters(): Promise<PairedPrinterInfo[]>
   disconnect(): Promise<void>
   isConnected(): boolean
