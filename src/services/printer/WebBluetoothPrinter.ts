@@ -141,6 +141,21 @@ export class WebBluetoothPrinter implements PrinterAdapter {
     }
   }
 
+  async listPairedPrinters(): Promise<{ id: string; name: string }[]> {
+    if (!this.isSupported()) return []
+    const bluetooth = navigator.bluetooth
+    if (!bluetooth?.getDevices) return []
+    try {
+      const devices = await bluetooth.getDevices()
+      return devices.map((device) => ({
+        id: device.id,
+        name: device.name?.trim() || 'BLE Printer',
+      }))
+    } catch {
+      return []
+    }
+  }
+
   private async connectToDevice(device: BluetoothDevice): Promise<void> {
       if (!device.gatt) {
         throw new PrinterConnectionError('Bluetooth GATT not available on device')

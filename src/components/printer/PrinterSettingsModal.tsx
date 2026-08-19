@@ -5,6 +5,19 @@ import { useAppStore } from '../../stores/useAppStore'
 import { printerService } from '../../services/printer/PrinterService'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
+import type { PairedPrinter } from '../../types'
+
+function mergePrinterLists(saved: PairedPrinter[], live: PairedPrinter[]): PairedPrinter[] {
+  const byId = new Map<string, PairedPrinter>()
+  for (const printer of saved) byId.set(printer.id, printer)
+  for (const printer of live) {
+    byId.set(printer.id, {
+      id: printer.id,
+      name: printer.name && printer.name !== 'BLE Printer' ? printer.name : byId.get(printer.id)?.name ?? printer.name,
+    })
+  }
+  return [...byId.values()]
+}
 
 export function PrinterSettingsModal() {
   const isOpen = useAppStore((s) => s.isPrinterSettingsOpen)
@@ -13,23 +26,47 @@ export function PrinterSettingsModal() {
   const businessName = useAppStore((s) => s.businessName)
 
   const paperWidth = usePrinterStore((s) => s.paperWidth)
+  const deviceId = usePrinterStore((s) => s.deviceId)
   const deviceName = usePrinterStore((s) => s.deviceName)
+  const pairedPrinters = usePrinterStore((s) => s.pairedPrinters) ?? []
   const status = usePrinterStore((s) => s.status)
   const lastError = usePrinterStore((s) => s.lastError)
   const isSupported = usePrinterStore((s) => s.isSupported)
   const setPaperWidth = usePrinterStore((s) => s.setPaperWidth)
   const setStatus = usePrinterStore((s) => s.setStatus)
-  const setDevice = usePrinterStore((s) => s.setDevice)
+  const rememberPrinter = usePrinterStore((s) => s.rememberPrinter)
+  const setPairedPrinters = usePrinterStore((s) => s.setPairedPrinters)
   const setLastError = usePrinterStore((s) => s.setLastError)
   const disconnect = usePrinterStore((s) => s.disconnect)
 
   const [isConnecting, setIsConnecting] = useState(false)
+  const [connectingId, setConnectingId] = useState<string | null>(null)
 
   useEffect(() => {
     usePrinterStore.getState().setIsSupported(printerService.isSupported())
   }, [])
 
-  async function handleConnect() {
+  useEffect(() => {
+    if (!isOpen || !isSupported) return
+    void refreshPairedList()
+  }, [isOpen, isSupported])
+
+  async function refreshPairedList() {
+    const live = await printerService.listPairedPrinters()
+    const merged = mergePrinterLists(usePrinterStore.getState().pairedPrinters ?? [], live)
+    setPairedPrinters(merged)
+  }
+
+  async function finishConnect(name: string | null) {
+    const id = printerService.getDeviceId()
+    const label = name ?? 'BLE Printer'
+    if (id) rememberPrinter(id, label)
+    setStatus('connected')
+    addToast('success', `Connected to ${label}`)
+    await refreshPairedList()
+  }
+
+  async function handlePairNew() {
     if (!isSupported) {
       addToast('error', 'Web Bluetooth is not supported. Use Chrome or Edge on Android/desktop.')
       return
@@ -41,9 +78,7 @@ export function PrinterSettingsModal() {
 
     try {
       const name = await printerService.connect()
-      setDevice(printerService.getDeviceId() ?? undefined, name ?? 'BLE Printer')
-      setStatus('connected')
-      addToast('success', `Connected to ${name ?? 'printer'}`)
+      await finishConnect(name)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Connection failed'
       setStatus('error')
@@ -51,6 +86,26 @@ export function PrinterSettingsModal() {
       addToast('error', message)
     } finally {
       setIsConnecting(false)
+    }
+  }
+
+  async function handleSelectPrinter(printer: PairedPrinter) {
+    if (status === 'connected' && deviceId === printer.id) return
+
+    setConnectingId(printer.id)
+    setStatus('connecting')
+    setLastError(null)
+
+    try {
+      const name = await printerService.reconnect(printer.id)
+      await finishConnect(name ?? printer.name)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Connection failed'
+      setStatus('error')
+      setLastError(message)
+      addToast('error', message)
+    } finally {
+      setConnectingId(null)
     }
   }
 
@@ -87,6 +142,9 @@ export function PrinterSettingsModal() {
     error: 'Error',
   }[status]
 
+  const hasPairedPrinters = pairedPrinters.length > 0
+  const busy = isConnecting || connectingId !== null
+
   return (
     <Modal open={isOpen} onClose={closePrinterSettings} title="Printer Settings" size="md">
       <div className="space-y-5">
@@ -103,7 +161,7 @@ export function PrinterSettingsModal() {
             <p className="font-semibold text-gray-900">{statusLabel}</p>
             {deviceName && (
               <p className="text-sm text-gray-600 mt-1">
-                {status === 'connected' ? 'Connected printer: ' : 'Saved printer: '}
+                {status === 'connected' ? 'Connected printer: ' : 'Last printer: '}
                 {deviceName}
               </p>
             )}
@@ -135,23 +193,64 @@ export function PrinterSettingsModal() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-2">
-          {status !== 'connected' ? (
-            <Button
-              variant="primary"
-              onClick={handleConnect}
-              disabled={!isSupported || isConnecting}
-              className="flex items-center justify-center gap-2"
-            >
-              <Bluetooth className="w-4 h-4" />
-              {isConnecting ? 'Connecting...' : 'Connect Printer'}
-            </Button>
+        <div>
+          <p className="text-sm font-medium text-gray-700 mb-2">Printers</p>
+          {hasPairedPrinters ? (
+            <div className="space-y-2">
+              {pairedPrinters.map((printer) => {
+                const isActive = status === 'connected' && deviceId === printer.id
+                const isThisConnecting = connectingId === printer.id
+                return (
+                  <button
+                    key={printer.id}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => handleSelectPrinter(printer)}
+                    className={`w-full flex items-center justify-between px-3 py-3 rounded-xl border text-left transition-colors ${
+                      isActive
+                        ? 'border-primary bg-primary/5'
+                        : 'border-gray-200 bg-white hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className="min-w-0">
+                      <span className="block font-medium text-gray-900 truncate">{printer.name}</span>
+                      <span className="block text-xs text-gray-500 mt-0.5">
+                        {isThisConnecting
+                          ? 'Connecting…'
+                          : isActive
+                            ? 'Connected'
+                            : 'Tap to connect'}
+                      </span>
+                    </span>
+                    <Bluetooth className={`w-4 h-4 shrink-0 ${isActive ? 'text-primary' : 'text-gray-400'}`} />
+                  </button>
+                )
+              })}
+            </div>
           ) : (
-            <Button variant="secondary" onClick={handleDisconnect}>
+            <p className="text-sm text-gray-500 bg-gray-50 rounded-xl px-3 py-3">
+              No saved printers yet. Pair one once with the browser list, then you can pick it here.
+            </p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {status === 'connected' ? (
+            <Button variant="secondary" onClick={handleDisconnect} disabled={busy}>
               Disconnect
             </Button>
-          )}
-          
+          ) : null}
+
+          <Button
+            variant={hasPairedPrinters ? 'secondary' : 'primary'}
+            onClick={handlePairNew}
+            disabled={!isSupported || busy}
+            className="flex items-center justify-center gap-2"
+          >
+            <Bluetooth className="w-4 h-4" />
+            {isConnecting ? 'Connecting...' : hasPairedPrinters ? 'Pair new printer' : 'Connect Printer'}
+          </Button>
+
           <Button
             variant="secondary"
             onClick={handleTestPrint}
@@ -164,8 +263,8 @@ export function PrinterSettingsModal() {
         </div>
 
         <p className="text-xs text-gray-500">
-          Supports BLE thermal printers via Web Bluetooth. Bluetooth Classic (SPP) printers are not
-          supported in web browsers.
+          The first connection uses the browser Bluetooth list. After that, select a saved printer
+          here — the app reconnects internally without that picker.
         </p>
       </div>
     </Modal>

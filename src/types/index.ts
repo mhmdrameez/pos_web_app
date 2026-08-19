@@ -48,10 +48,16 @@ export interface AppSettings {
   emailSettings?: EmailSettings
 }
 
+export interface PairedPrinter {
+  id: string
+  name: string
+}
+
 export interface PrinterSettings {
   paperWidth: 58 | 80
   deviceId?: string
   deviceName?: string
+  pairedPrinters?: PairedPrinter[]
 }
 
 export type SidebarView =

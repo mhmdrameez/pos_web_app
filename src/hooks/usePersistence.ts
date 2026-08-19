@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { initializeDatabase, getSettings, getCartSnapshot, saveCartSnapshot } from '../services/db/database'
 import { getPrinterSettings, savePrinterSettings } from '../services/db/database'
+import { printerService } from '../services/printer/PrinterService'
 import { useAppStore } from '../stores/useAppStore'
 import { useCartStore } from '../stores/useCartStore'
 import { usePrinterStore } from '../stores/usePrinterStore'
@@ -32,7 +33,17 @@ export function usePersistence() {
         loadPrinterSettings(printer)
         setDbReady(true)
 
-
+        if (printer.deviceId) {
+          try {
+            const name = await printerService.reconnect(printer.deviceId)
+            if (!mounted) return
+            const store = usePrinterStore.getState()
+            store.rememberPrinter(printer.deviceId, name ?? printer.deviceName ?? 'BLE Printer')
+            store.setStatus('connected')
+          } catch {
+            if (mounted) usePrinterStore.getState().setStatus('disconnected')
+          }
+        }
       } catch {
         addToast('error', 'Failed to initialize database')
       }

@@ -37,6 +37,10 @@ export class PrinterService {
     return this.adapter.getDeviceName()
   }
 
+  async listPairedPrinters(): Promise<{ id: string; name: string }[]> {
+    return this.adapter.listPairedPrinters()
+  }
+
   async disconnect(): Promise<void> {
     await this.adapter.disconnect()
   }

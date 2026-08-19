@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { PrinterSettings } from '../types'
+import type { PairedPrinter, PrinterSettings } from '../types'
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
 
@@ -12,16 +12,40 @@ interface PrinterState extends PrinterSettings {
   setStatus: (status: ConnectionStatus) => void
   setLastError: (error: string | null) => void
   setDevice: (deviceId: string | undefined, deviceName: string | undefined) => void
+  rememberPrinter: (deviceId: string, deviceName: string) => void
+  setPairedPrinters: (printers: PairedPrinter[]) => void
   setIsSupported: (supported: boolean) => void
   loadSettings: (settings: PrinterSettings) => void
   getSettings: () => PrinterSettings
   disconnect: () => void
 }
 
+function upsertPrinter(list: PairedPrinter[] | undefined, deviceId: string, deviceName: string): PairedPrinter[] {
+  const printers = list ?? []
+  if (printers.some((printer) => printer.id === deviceId)) {
+    return printers.map((printer) =>
+      printer.id === deviceId ? { id: deviceId, name: deviceName } : printer,
+    )
+  }
+  return [...printers, { id: deviceId, name: deviceName }]
+}
+
+function seedPairedPrinters(settings: PrinterSettings): PairedPrinter[] {
+  const saved = settings.pairedPrinters ?? []
+  if (settings.deviceId && !saved.some((printer) => printer.id === settings.deviceId)) {
+    return [
+      ...saved,
+      { id: settings.deviceId, name: settings.deviceName ?? 'BLE Printer' },
+    ]
+  }
+  return saved
+}
+
 export const usePrinterStore = create<PrinterState>((set, get) => ({
   paperWidth: 58,
   deviceId: undefined,
   deviceName: undefined,
+  pairedPrinters: [],
   status: 'disconnected',
   lastError: null,
   isSupported: typeof navigator !== 'undefined' && 'bluetooth' in navigator,
@@ -34,6 +58,15 @@ export const usePrinterStore = create<PrinterState>((set, get) => ({
 
   setDevice: (deviceId, deviceName) => set({ deviceId, deviceName }),
 
+  rememberPrinter: (deviceId, deviceName) =>
+    set((state) => ({
+      deviceId,
+      deviceName,
+      pairedPrinters: upsertPrinter(state.pairedPrinters, deviceId, deviceName),
+    })),
+
+  setPairedPrinters: (printers) => set({ pairedPrinters: printers }),
+
   setIsSupported: (supported) => set({ isSupported: supported }),
 
   loadSettings: (settings) =>
@@ -41,18 +74,17 @@ export const usePrinterStore = create<PrinterState>((set, get) => ({
       paperWidth: settings.paperWidth,
       deviceId: settings.deviceId,
       deviceName: settings.deviceName,
+      pairedPrinters: seedPairedPrinters(settings),
     }),
 
   getSettings: () => {
-    const { paperWidth, deviceId, deviceName } = get()
-    return { paperWidth, deviceId, deviceName }
+    const { paperWidth, deviceId, deviceName, pairedPrinters } = get()
+    return { paperWidth, deviceId, deviceName, pairedPrinters }
   },
 
   disconnect: () =>
     set({
       status: 'disconnected',
-      deviceId: undefined,
-      deviceName: undefined,
       lastError: null,
     }),
 }))
