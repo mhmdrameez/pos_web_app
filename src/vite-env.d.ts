@@ -8,6 +8,7 @@ interface BluetoothDevice {
   readonly name?: string
   readonly gatt?: BluetoothRemoteGATTServer
   addEventListener(type: 'gattserverdisconnected', listener: EventListener): void
+  removeEventListener(type: 'gattserverdisconnected', listener: EventListener): void
 }
 
 interface BluetoothRemoteGATTServer {

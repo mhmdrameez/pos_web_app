@@ -32,15 +32,64 @@ const WRITE_CHARACTERISTIC_UUIDS = [
 const CHUNK_SIZE = 20           // bytes — fits every BLE MTU incl. the default 23-byte MTU
 const INTER_CHUNK_DELAY_MS = 20 // ms — safe drain time for the printer's serial FIFO
 const MAX_RETRIES = 3           // retries per chunk before giving up
+const WRITE_TIMEOUT_MS = 8000   // hanging GATT writes are how "connected but dead" shows up
+const KEEPALIVE_INTERVAL_MS = 30_000
+const MAX_AUTO_RECONNECT_ATTEMPTS = 5
+const RECONNECT_BASE_DELAY_MS = 1500
 // ─────────────────────────────────────────────────────────────────────────────
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+async function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new PrinterConnectionError(message)), ms)
+      }),
+    ])
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+    void promise.catch(() => undefined)
+  }
+}
+
+function isTransientWriteError(message: string): boolean {
+  const msg = message.toLowerCase()
+  return msg.includes('network') || msg.includes('busy')
+}
+
+function isDeadConnectionError(error: unknown): boolean {
+  const msg = (error instanceof Error ? error.message : String(error)).toLowerCase()
+  return (
+    msg.includes('timed out') ||
+    msg.includes('gatt') ||
+    msg.includes('disconnect') ||
+    msg.includes('not connected') ||
+    msg.includes('no longer') ||
+    msg.includes('unavailable') ||
+    msg.includes('failed to execute')
+  )
+}
+
 export class WebBluetoothPrinter implements PrinterAdapter {
   private device: BluetoothDevice | null = null
   private characteristic: BluetoothRemoteGATTCharacteristic | null = null
+  private userDisconnected = false
+  private reconnecting = false
+  private suppressDisconnectHandling = false
+  private keepAliveTimer: ReturnType<typeof setInterval> | null = null
+  private visibilityListener: (() => void) | null = null
+  private disconnectListener: EventListener | null = null
+  private onConnectionChange: ((connected: boolean) => void) | null = null
+  private writeChain: Promise<void> = Promise.resolve()
+
+  setConnectionListener(listener: ((connected: boolean) => void) | null): void {
+    this.onConnectionChange = listener
+  }
 
   isSupported(): boolean {
     return typeof navigator !== 'undefined' && 'bluetooth' in navigator
@@ -62,6 +111,7 @@ export class WebBluetoothPrinter implements PrinterAdapter {
         optionalServices: PRINTER_SERVICE_UUIDS,
       })
 
+      this.userDisconnected = false
       await this.connectToDevice(device)
     } catch (error) {
       this.throwConnectionError(error)
@@ -84,6 +134,7 @@ export class WebBluetoothPrinter implements PrinterAdapter {
         throw new PrinterConnectionError('Saved printer permission is no longer available')
       }
 
+      this.userDisconnected = false
       await this.connectToDevice(device)
     } catch (error) {
       this.throwConnectionError(error)
@@ -95,7 +146,13 @@ export class WebBluetoothPrinter implements PrinterAdapter {
         throw new PrinterConnectionError('Bluetooth GATT not available on device')
       }
 
-      const server = await device.gatt.connect()
+      this.unbindDisconnect(this.device)
+
+      const server = await withTimeout(
+        device.gatt.connect(),
+        WRITE_TIMEOUT_MS,
+        'Printer connection timed out',
+      )
       let characteristic: BluetoothRemoteGATTCharacteristic | null = null
 
       for (const serviceUuid of PRINTER_SERVICE_UUIDS) {
@@ -137,12 +194,143 @@ export class WebBluetoothPrinter implements PrinterAdapter {
 
       this.device = device
       this.characteristic = characteristic
+      this.bindDisconnect(device)
+      this.startKeepAlive()
+      this.bindVisibilityResume()
+      this.notifyConnection(true)
+  }
 
-      // Clear BOTH references on disconnect so isConnected() never lies
-      device.addEventListener('gattserverdisconnected', () => {
-        this.characteristic = null
-        this.device = null
+  private bindDisconnect(device: BluetoothDevice): void {
+    this.unbindDisconnect(device)
+    this.disconnectListener = () => {
+      this.characteristic = null
+      this.stopKeepAlive()
+      if (this.suppressDisconnectHandling) return
+      this.notifyConnection(false)
+      if (!this.userDisconnected) {
+        void this.autoReconnect()
+      }
+    }
+    device.addEventListener('gattserverdisconnected', this.disconnectListener)
+  }
+
+  private unbindDisconnect(device: BluetoothDevice | null): void {
+    if (device && this.disconnectListener) {
+      device.removeEventListener('gattserverdisconnected', this.disconnectListener)
+    }
+    this.disconnectListener = null
+  }
+
+  private bindVisibilityResume(): void {
+    if (this.visibilityListener || typeof document === 'undefined') return
+    this.visibilityListener = () => {
+      if (document.visibilityState === 'visible' && !this.userDisconnected && this.device) {
+        void this.ensureLiveConnection().catch(() => {
+          // keep-alive / next print will retry
+        })
+      }
+    }
+    document.addEventListener('visibilitychange', this.visibilityListener)
+  }
+
+  private startKeepAlive(): void {
+    this.stopKeepAlive()
+    this.keepAliveTimer = setInterval(() => {
+      void this.ping().catch(() => {
+        void this.recoverConnection()
       })
+    }, KEEPALIVE_INTERVAL_MS)
+  }
+
+  private stopKeepAlive(): void {
+    if (this.keepAliveTimer !== null) {
+      clearInterval(this.keepAliveTimer)
+      this.keepAliveTimer = null
+    }
+  }
+
+  private notifyConnection(connected: boolean): void {
+    this.onConnectionChange?.(connected)
+  }
+
+  private async ping(): Promise<void> {
+    if (!this.isConnected() || this.userDisconnected) return
+    // NUL is ignored by ESC/POS printers; success means the GATT link is still live.
+    await this.withWriteLock(async () => {
+      if (!this.isConnected()) return
+      await this.writeAll(new Uint8Array([0x00]))
+    })
+  }
+
+  private async autoReconnect(): Promise<void> {
+    if (this.userDisconnected || this.reconnecting || !this.device) return
+    this.reconnecting = true
+    try {
+      for (let attempt = 0; attempt < MAX_AUTO_RECONNECT_ATTEMPTS; attempt++) {
+        if (this.userDisconnected || !this.device) return
+        await delay(RECONNECT_BASE_DELAY_MS * Math.pow(2, attempt))
+        try {
+          await this.connectToDevice(this.device)
+          return
+        } catch {
+          // try again
+        }
+      }
+    } finally {
+      this.reconnecting = false
+    }
+  }
+
+  private async recoverConnection(): Promise<void> {
+    if (this.userDisconnected || !this.device?.gatt) {
+      throw new PrinterConnectionError('Printer is not connected')
+    }
+
+    this.suppressDisconnectHandling = true
+    try {
+      if (this.device.gatt.connected) {
+        this.device.gatt.disconnect()
+      }
+    } catch {
+      // already down
+    }
+
+    this.characteristic = null
+    await delay(400)
+    try {
+      await this.connectToDevice(this.device)
+    } finally {
+      this.suppressDisconnectHandling = false
+    }
+  }
+
+  private async ensureLiveConnection(): Promise<void> {
+    if (this.userDisconnected) {
+      throw new PrinterConnectionError('Printer is not connected')
+    }
+
+    if (this.isConnected()) return
+
+    if (this.device) {
+      await this.recoverConnection()
+      return
+    }
+
+    throw new PrinterConnectionError('Printer is not connected')
+  }
+
+  private async withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+    const previous = this.writeChain
+    let release: () => void = () => {}
+    this.writeChain = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    await previous.catch(() => undefined)
+    try {
+      return await fn()
+    } finally {
+      release()
+    }
   }
 
   private throwConnectionError(error: unknown): never {
@@ -157,11 +345,15 @@ export class WebBluetoothPrinter implements PrinterAdapter {
   }
 
   async disconnect(): Promise<void> {
+    this.userDisconnected = true
+    this.stopKeepAlive()
+    this.unbindDisconnect(this.device)
     if (this.device?.gatt?.connected) {
       this.device.gatt.disconnect()
     }
     this.device = null
     this.characteristic = null
+    this.notifyConnection(false)
   }
 
   isConnected(): boolean {
@@ -197,6 +389,21 @@ export class WebBluetoothPrinter implements PrinterAdapter {
   //  • writeValueWithResponse preferred when available (gives GATT backpressure)
   // ───────────────────────────────────────────────────────────────────────────
   async print(data: Uint8Array): Promise<void> {
+    await this.withWriteLock(async () => {
+      await this.ensureLiveConnection()
+      try {
+        await this.writeAll(data)
+      } catch (error) {
+        if (!isDeadConnectionError(error) || this.userDisconnected) {
+          throw error
+        }
+        await this.recoverConnection()
+        await this.writeAll(data)
+      }
+    })
+  }
+
+  private async writeAll(data: Uint8Array): Promise<void> {
     if (!this.characteristic || !this.isConnected()) {
       throw new PrinterConnectionError('Printer is not connected')
     }
@@ -222,11 +429,19 @@ export class WebBluetoothPrinter implements PrinterAdapter {
             // no delay needed, works even on 2nd+ print.
             // writeValue is the acknowledged (write-with-response) call in the
             // Web Bluetooth TS types — it waits for the GATT ACK before returning.
-            await char.writeValue(chunk)
+            await withTimeout(
+              char.writeValue(chunk),
+              WRITE_TIMEOUT_MS,
+              'Printer write timed out',
+            )
           } else {
             // writeWithoutResponse: browser queues internally; when queue is full
             // it throws NetworkError. We catch, back off, and retry.
-            await char.writeValueWithoutResponse(chunk)
+            await withTimeout(
+              char.writeValueWithoutResponse(chunk),
+              WRITE_TIMEOUT_MS,
+              'Printer write timed out',
+            )
             // Give the printer's serial FIFO time to drain before next chunk.
             await delay(INTER_CHUNK_DELAY_MS)
           }
@@ -235,8 +450,13 @@ export class WebBluetoothPrinter implements PrinterAdapter {
         } catch (err) {
           lastError = err
           const msg = err instanceof Error ? err.message : String(err)
+          if (isDeadConnectionError(err) && !isTransientWriteError(msg)) {
+            throw err instanceof PrinterConnectionError
+              ? err
+              : new PrinterConnectionError(`Write failed: ${msg}`)
+          }
           // Only retry on queue-full / network errors, not hard failures
-          if (!msg.toLowerCase().includes('network') && !msg.toLowerCase().includes('busy')) {
+          if (!isTransientWriteError(msg)) {
             throw new PrinterConnectionError(`Write failed: ${msg}`)
           }
           // Exponential back-off: 50ms, 100ms, 200ms …

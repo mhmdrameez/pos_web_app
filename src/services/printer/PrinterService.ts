@@ -1,4 +1,5 @@
 import type { CompletedSale } from '../../types'
+import { usePrinterStore } from '../../stores/usePrinterStore'
 import { generateReceiptData, type ReceiptData } from '../receipt/receiptGenerator'
 import { EscPosEncoder } from './EscPosEncoder'
 import type { PrinterAdapter } from './PrinterAdapter'
@@ -9,6 +10,17 @@ export class PrinterService {
 
   constructor(adapter?: PrinterAdapter) {
     this.adapter = adapter ?? new WebBluetoothPrinter()
+    if (this.adapter instanceof WebBluetoothPrinter) {
+      this.adapter.setConnectionListener((connected) => {
+        const store = usePrinterStore.getState()
+        if (connected) {
+          store.setStatus('connected')
+          store.setLastError(null)
+        } else if (store.status === 'connected') {
+          store.setStatus('disconnected')
+        }
+      })
+    }
   }
 
   isSupported(): boolean {
