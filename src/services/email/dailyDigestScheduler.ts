@@ -69,7 +69,9 @@ async function runDailyDigest(): Promise<void> {
     }
 
     const { start, end } = getTodayBounds()
-    const sales = await getSalesByDateRange(start, end)
+    const sales = (await getSalesByDateRange(start, end)).filter(
+      (sale) => sale.status !== 'cancelled',
+    )
 
     if (sales.length === 0) {
       scheduleNextDigest()
@@ -122,7 +124,9 @@ export async function triggerDailyDigestNow(): Promise<{ success: boolean; error
     }
 
     const { start, end } = getTodayBounds()
-    const sales = await getSalesByDateRange(start, end)
+    const sales = (await getSalesByDateRange(start, end)).filter(
+      (sale) => sale.status !== 'cancelled',
+    )
 
     if (sales.length === 0) {
       return { success: false, error: 'No sales recorded today.' }

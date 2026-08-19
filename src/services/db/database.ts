@@ -124,6 +124,10 @@ export async function getCompletedSales(): Promise<CompletedSale[]> {
   return []
 }
 
+export async function getCompletedSale(id: string): Promise<CompletedSale | undefined> {
+  return db.completedSales.get(id)
+}
+
 export async function saveCompletedSale(sale: CompletedSale): Promise<void> {
   await db.completedSales.put(sale)
   const sales = getCompletedSalesBackup().filter((storedSale) => storedSale.id !== sale.id)
@@ -148,6 +152,27 @@ export async function markEmailSent(saleId: string, sentAt: number): Promise<voi
   const backup = getCompletedSalesBackup().map((s) =>
     s.id === saleId ? { ...s, emailSentAt: sentAt } : s,
   )
+  saveCompletedSalesBackup(backup)
+}
+
+export async function cancelCompletedSale(id: string): Promise<void> {
+  const sale = await db.completedSales.get(id)
+  if (!sale) {
+    throw new Error('Sale not found')
+  }
+  if (sale.status === 'cancelled') {
+    return
+  }
+
+  const updated: CompletedSale = {
+    ...sale,
+    status: 'cancelled',
+    updatedAt: Date.now(),
+  }
+
+  await db.completedSales.put(updated)
+
+  const backup = getCompletedSalesBackup().map((s) => (s.id === id ? updated : s))
   saveCompletedSalesBackup(backup)
 }
 

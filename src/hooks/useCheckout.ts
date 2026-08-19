@@ -2,6 +2,7 @@ import { useAppStore } from '../stores/useAppStore'
 import { useCartStore } from '../stores/useCartStore'
 import {
   getNextInvoiceNumber,
+  getCompletedSale,
   saveCompletedSale,
   saveOrder,
   deleteSavedOrder,
@@ -33,31 +34,59 @@ export function useCheckout() {
     }
 
     try {
-      const invoiceNumber = await getNextInvoiceNumber()
       const now = Date.now()
       const subtotalPaise = cart.getSubtotalPaise()
       const discountPaise = cart.discountPaise
       const grandTotalPaise = cart.getGrandTotalPaise()
+      const editingSale = cart.editingSale
 
-      const sale: CompletedSale = {
-        id: generateId(),
-        orderNumber: generateOrderNumber(),
-        invoiceNumber,
-        createdAt: now,
-        updatedAt: now,
-        completedAt: now,
-        customer: cart.customer ?? undefined,
-        items: [...items],
-        subtotalPaise,
-        discountPaise,
-        grandTotalPaise,
-        status: 'completed',
-        paymentMethod,
-        amountPaidPaise: paymentMethod === 'cash' ? amountPaidPaise : grandTotalPaise,
-        changePaise:
-          paymentMethod === 'cash' && amountPaidPaise
-            ? Math.max(0, amountPaidPaise - grandTotalPaise)
-            : undefined,
+      let sale: CompletedSale
+
+      if (editingSale) {
+        const existing = await getCompletedSale(editingSale.id)
+        if (!existing || existing.status === 'cancelled') {
+          addToast('error', 'This bill can no longer be edited')
+          cart.cancelEditingSale()
+          return false
+        }
+
+        sale = {
+          ...existing,
+          updatedAt: now,
+          customer: cart.customer ?? undefined,
+          items: [...items],
+          subtotalPaise,
+          discountPaise,
+          grandTotalPaise,
+          paymentMethod,
+          amountPaidPaise: paymentMethod === 'cash' ? amountPaidPaise : grandTotalPaise,
+          changePaise:
+            paymentMethod === 'cash' && amountPaidPaise
+              ? Math.max(0, amountPaidPaise - grandTotalPaise)
+              : undefined,
+        }
+      } else {
+        const invoiceNumber = await getNextInvoiceNumber()
+        sale = {
+          id: generateId(),
+          orderNumber: generateOrderNumber(),
+          invoiceNumber,
+          createdAt: now,
+          updatedAt: now,
+          completedAt: now,
+          customer: cart.customer ?? undefined,
+          items: [...items],
+          subtotalPaise,
+          discountPaise,
+          grandTotalPaise,
+          status: 'completed',
+          paymentMethod,
+          amountPaidPaise: paymentMethod === 'cash' ? amountPaidPaise : grandTotalPaise,
+          changePaise:
+            paymentMethod === 'cash' && amountPaidPaise
+              ? Math.max(0, amountPaidPaise - grandTotalPaise)
+              : undefined,
+        }
       }
 
       await saveCompletedSale(sale)
@@ -82,7 +111,10 @@ export function useCheckout() {
 
       clearCart()
       closeCheckoutModal()
-      addToast('success', `Sale completed — ${invoiceNumber}`)
+      addToast(
+        'success',
+        editingSale ? `Bill updated — ${sale.invoiceNumber}` : `Sale completed — ${sale.invoiceNumber}`,
+      )
       return true
     } catch {
       addToast('error', 'Failed to complete sale')
