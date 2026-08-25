@@ -26,13 +26,16 @@ export function QuickSaleView() {
           <h2 className="text-lg font-semibold">Quick Sale</h2>
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={openPrinterSettings}
-              className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-primary"
+              className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-primary text-sm font-medium"
               aria-label="Printer settings"
             >
               <Printer className="w-5 h-5" />
+              <span>Printer Settings</span>
             </button>
             <button
+              type="button"
               onClick={toggleCartDrawer}
               className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200"
               aria-label="Toggle cart"
@@ -42,14 +45,14 @@ export function QuickSaleView() {
           </div>
         </div>
 
-        {/* Desktop/tablet top bar */}
         <div className="hidden md:flex justify-end mb-2">
           <button
+            type="button"
             onClick={openPrinterSettings}
             className="flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm font-medium text-primary hover:bg-gray-50"
           >
             <Printer className="w-4 h-4" />
-            Printer
+            Printer Settings
           </button>
         </div>
 

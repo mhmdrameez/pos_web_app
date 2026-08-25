@@ -59,9 +59,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   businessName: 'My Business',
 
   setActiveSidebarView: (view) => {
-    set({ activeSidebarView: view })
-    if (view === 'quick-sale') set({ activeBottomTab: 'quick-sale' })
-    if (view === 'saved-orders') set({ activeBottomTab: 'saved-orders' })
+    set({
+      activeSidebarView: view,
+      ...(view === 'quick-sale' ? { isPrinterSettingsOpen: false, activeBottomTab: 'quick-sale' as const } : {}),
+      ...(view === 'saved-orders' ? { activeBottomTab: 'saved-orders' as const } : {}),
+    })
   },
 
   setActiveBottomTab: (tab) => {
@@ -74,7 +76,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   closeCustomerModal: () => set({ isCustomerModalOpen: false }),
   openCheckoutModal: () => set({ isCheckoutModalOpen: true }),
   closeCheckoutModal: () => set({ isCheckoutModalOpen: false }),
-  openPrinterSettings: () => set({ isPrinterSettingsOpen: true, activeSidebarView: 'printer-settings' }),
+  openPrinterSettings: () => set({ isPrinterSettingsOpen: true }),
   closePrinterSettings: () => set({ isPrinterSettingsOpen: false }),
   openAppSettings: () => set({ isAppSettingsOpen: true, activeSidebarView: 'app-settings' }),
   closeAppSettings: () => set({ isAppSettingsOpen: false }),

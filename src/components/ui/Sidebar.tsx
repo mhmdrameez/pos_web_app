@@ -16,13 +16,16 @@ const navItems: { id: SidebarView; label: string; icon: typeof History }[] = [
 export function Sidebar() {
   const activeView = useAppStore((s) => s.activeSidebarView)
   const setActiveView = useAppStore((s) => s.setActiveSidebarView)
-  const openPrinterSettings = useAppStore((s) => s.openPrinterSettings)
+  const closePrinterSettings = useAppStore((s) => s.closePrinterSettings)
   const openAppSettings = useAppStore((s) => s.openAppSettings)
 
   function handleNav(id: SidebarView) {
     if (id === 'printer-settings') {
-      openPrinterSettings()
-    } else if (id === 'app-settings') {
+      closePrinterSettings()
+      setActiveView('quick-sale')
+      return
+    }
+    if (id === 'app-settings') {
       openAppSettings()
     } else {
       setActiveView(id)
