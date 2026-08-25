@@ -42,6 +42,8 @@ export function useCheckout() {
 
       let sale: CompletedSale
 
+      let previousSale: CompletedSale | undefined
+
       if (editingSale) {
         const existing = await getCompletedSale(editingSale.id)
         if (!existing || existing.status === 'cancelled') {
@@ -49,6 +51,7 @@ export function useCheckout() {
           cart.cancelEditingSale()
           return false
         }
+        previousSale = existing
 
         sale = {
           ...existing,
@@ -90,6 +93,13 @@ export function useCheckout() {
       }
 
       await saveCompletedSale(sale)
+
+      const { forgetCompletedSale, ingestCompletedSale, persistSuggestionSnapshot } = await import(
+        '../services/suggestion'
+      )
+      if (previousSale) forgetCompletedSale(previousSale)
+      ingestCompletedSale(sale)
+      await persistSuggestionSnapshot()
 
       if (savedOrderId) {
         await deleteSavedOrder(savedOrderId)

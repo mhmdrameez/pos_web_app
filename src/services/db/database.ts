@@ -6,6 +6,7 @@ import type {
   PrinterSettings,
   SavedOrder,
 } from '../../types'
+import type { ProductPairStat, ProductStat } from '../../types/suggestion'
 
 const DEFAULT_SETTINGS: AppSettings = {
   businessName: 'INVOICE',
@@ -49,6 +50,9 @@ class QuickSaleDB extends Dexie {
   printerSettings!: Table<PrinterSettings & { id: string }>
   cart!: Table<CartSnapshot & { id: string }>
   counters!: Table<{ id: string; invoiceSequence: number; orderSequence: number }>
+  productStats!: Table<ProductStat>
+  productPairs!: Table<ProductPairStat>
+  suggestionMeta!: Table<{ id: string; fingerprint: string; rebuiltAt: number }>
 
   constructor() {
     super('QuickSalePOS')
@@ -59,6 +63,17 @@ class QuickSaleDB extends Dexie {
       printerSettings: 'id',
       cart: 'id',
       counters: 'id',
+    })
+    this.version(2).stores({
+      savedOrders: 'id, orderNumber, status, createdAt, updatedAt',
+      completedSales: 'id, invoiceNumber, completedAt, status',
+      settings: 'id',
+      printerSettings: 'id',
+      cart: 'id',
+      counters: 'id',
+      productStats: 'productKey, lastSoldAt',
+      productPairs: 'id',
+      suggestionMeta: 'id',
     })
   }
 }
@@ -174,6 +189,10 @@ export async function cancelCompletedSale(id: string): Promise<void> {
 
   const backup = getCompletedSalesBackup().map((s) => (s.id === id ? updated : s))
   saveCompletedSalesBackup(backup)
+
+  const { forgetCompletedSale, persistSuggestionSnapshot } = await import('../suggestion')
+  forgetCompletedSale(sale)
+  await persistSuggestionSnapshot()
 }
 
 export async function getNextInvoiceNumber(): Promise<string> {
@@ -185,6 +204,50 @@ export async function getNextInvoiceNumber(): Promise<string> {
     orderSequence: counter?.orderSequence ?? 0,
   })
   return `INV-${next.toString().padStart(6, '0')}`
+}
+
+export async function getSuggestionMeta(): Promise<{ fingerprint: string; rebuiltAt: number } | undefined> {
+  const row = await db.suggestionMeta.get('default')
+  if (!row) return undefined
+  return { fingerprint: row.fingerprint, rebuiltAt: row.rebuiltAt }
+}
+
+export async function saveSuggestionIndex(
+  stats: ProductStat[],
+  pairs: ProductPairStat[],
+  fingerprint: string,
+): Promise<void> {
+  await db.transaction('rw', db.productStats, db.productPairs, db.suggestionMeta, async () => {
+    await db.productStats.clear()
+    await db.productPairs.clear()
+    if (stats.length > 0) await db.productStats.bulkPut(stats)
+    if (pairs.length > 0) await db.productPairs.bulkPut(pairs)
+    await db.suggestionMeta.put({ id: 'default', fingerprint, rebuiltAt: Date.now() })
+  })
+}
+
+export async function loadSuggestionIndex(): Promise<{ stats: ProductStat[]; pairs: ProductPairStat[] }> {
+  const [stats, pairs] = await Promise.all([db.productStats.toArray(), db.productPairs.toArray()])
+  return { stats, pairs }
+}
+
+export async function upsertProductStat(stat: ProductStat): Promise<void> {
+  await db.productStats.put(stat)
+}
+
+export async function upsertProductPair(pair: ProductPairStat): Promise<void> {
+  await db.productPairs.put(pair)
+}
+
+export async function computeSalesFingerprint(): Promise<string> {
+  let count = 0
+  let latest = 0
+  await db.completedSales.each((sale) => {
+    if (sale.status === 'cancelled') return
+    count += 1
+    latest = Math.max(latest, sale.completedAt)
+  })
+  return `${count}:${latest}`
 }
 
 export async function initializeDatabase(): Promise<void> {

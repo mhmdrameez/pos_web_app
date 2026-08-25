@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useCartStore } from '../stores/useCartStore'
+import { resolveAddItemName, useSuggestionUiStore } from '../stores/useSuggestionUiStore'
 
 export function useKeyboardShortcuts() {
   const appendToAmount = useCartStore((s) => s.appendToAmount)
@@ -21,7 +22,9 @@ export function useKeyboardShortcuts() {
 
       if (e.key === 'Enter') {
         e.preventDefault()
-        addItem()
+        const resolved = resolveAddItemName()
+        addItem(resolved.name, resolved.source)
+        useSuggestionUiStore.getState().reset()
         return
       }
 

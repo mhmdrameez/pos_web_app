@@ -1,6 +1,7 @@
 import { Delete } from 'lucide-react'
 import { useCartStore } from '../../stores/useCartStore'
 import { useAppStore } from '../../stores/useAppStore'
+import { resolveAddItemName, useSuggestionUiStore } from '../../stores/useSuggestionUiStore'
 import { Button } from '../ui/Button'
 
 export function NumericKeypad() {
@@ -14,9 +15,12 @@ export function NumericKeypad() {
   }
 
   function handleAddItem() {
-    if (!addItem()) {
+    const resolved = resolveAddItemName()
+    if (!addItem(resolved.name, resolved.source)) {
       addToast('error', 'Enter a valid amount greater than zero')
+      return
     }
+    useSuggestionUiStore.getState().reset()
   }
 
   const digitBtn = (key: string) => (

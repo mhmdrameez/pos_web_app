@@ -2,6 +2,7 @@ import { Minus, Plus, Trash2 } from 'lucide-react'
 import { useCartStore } from '../../stores/useCartStore'
 import { useAppStore } from '../../stores/useAppStore'
 import { formatRupees } from '../../utils/money'
+import { productSuggestionEngine } from '../../services/suggestion/engine'
 
 interface OrderItemRowProps {
   id: string
@@ -30,7 +31,19 @@ export function OrderItemRow({ id, name, unitPricePaise, quantity }: OrderItemRo
       <div className="flex-1 min-w-0">
         <input
           defaultValue={name}
-          onBlur={(event) => updateItemName(id, event.target.value)}
+          onBlur={(event) => {
+            const nextName = event.target.value.trim()
+            updateItemName(id, nextName)
+            if (!nextName) return
+            productSuggestionEngine.learn({
+              displayName: nextName,
+              unitPricePaise,
+              quantity,
+              soldAt: Date.now(),
+              weight: 3,
+              source: 'manual',
+            })
+          }}
           className="w-full bg-transparent font-medium text-gray-900 outline-none focus:ring-2 focus:ring-primary/30 rounded px-1 -ml-1"
           aria-label="Item name"
         />

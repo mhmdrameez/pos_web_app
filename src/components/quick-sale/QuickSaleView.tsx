@@ -5,6 +5,7 @@ import { NumericKeypad } from './NumericKeypad'
 import { OrderPanel } from './OrderPanel'
 import { useAppStore } from '../../stores/useAppStore'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
+import { useProductSuggestion } from '../../hooks/useProductSuggestion'
 
 export function QuickSaleView() {
   const isCartDrawerOpen = useAppStore((s) => s.isCartDrawerOpen)
@@ -16,6 +17,7 @@ export function QuickSaleView() {
   const [isOrderOpen, setIsOrderOpen] = useState(true)
 
   useKeyboardShortcuts()
+  useProductSuggestion()
 
   return (
     <div className="flex flex-1 min-h-0 relative bg-white">

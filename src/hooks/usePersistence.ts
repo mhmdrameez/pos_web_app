@@ -33,6 +33,13 @@ export function usePersistence() {
         loadPrinterSettings(printer)
         setDbReady(true)
 
+        try {
+          const { ensureProductSuggestionIndex } = await import('../services/suggestion')
+          await ensureProductSuggestionIndex()
+        } catch {
+          // Suggestions stay off until the next successful local index rebuild.
+        }
+
         if (printer.deviceId) {
           printerService.startSilentAutoConnect()
         }

@@ -1,8 +1,11 @@
+import type { LineNameSource } from './suggestion'
+
 export interface CartItem {
   id: string
   name: string
   unitPricePaise: number
   quantity: number
+  nameSource?: LineNameSource
 }
 
 export interface Customer {

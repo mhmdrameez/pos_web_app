@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { CartItem, CompletedSale, Customer } from '../types'
+import type { LineNameSource } from '../types/suggestion'
 import {
   calculateGrandTotal,
   calculateSubtotal,
@@ -7,6 +8,7 @@ import {
   parseAmountInput,
 } from '../utils/money'
 import { generateId } from '../utils/id'
+import { autoLineName } from '../services/suggestion/productName'
 
 export function getAlphabetName(num: number): string {
   let result = ''
@@ -39,7 +41,7 @@ interface CartState {
   appendToAmount: (input: string) => void
   backspaceAmount: () => void
   clearAmount: () => void
-  addItem: () => boolean
+  addItem: (name?: string, nameSource?: LineNameSource) => boolean
   updateQuantity: (id: string, delta: number) => 'removed' | 'updated' | 'confirm-remove'
   updateItemName: (id: string, name: string) => void
   removeItem: (id: string) => void
@@ -88,16 +90,18 @@ export const useCartStore = create<CartState>((set, get) => ({
 
   clearAmount: () => set({ currentAmount: '' }),
 
-  addItem: () => {
+  addItem: (name, nameSource) => {
     const { currentAmount, items, nextItemNumber } = get()
     const entry = parseAmountAndQuantity(currentAmount)
     if (!entry) return false
 
+    const trimmed = name?.trim()
     const newItem: CartItem = {
       id: generateId(),
-      name: `${entry.unitPricePaise / 100} x ${entry.quantity}`,
+      name: trimmed && trimmed.length > 0 ? trimmed : autoLineName(entry.unitPricePaise, entry.quantity),
       unitPricePaise: entry.unitPricePaise,
       quantity: entry.quantity,
+      nameSource: trimmed ? (nameSource ?? 'suggested') : 'auto',
     }
 
     set({
@@ -125,7 +129,11 @@ export const useCartStore = create<CartState>((set, get) => ({
   updateItemName: (id, name) => {
     const trimmedName = name.trim()
     if (!trimmedName) return
-    set({ items: get().items.map((item) => (item.id === id ? { ...item, name: trimmedName } : item)) })
+    set({
+      items: get().items.map((item) =>
+        item.id === id ? { ...item, name: trimmedName, nameSource: 'manual' as const } : item,
+      ),
+    })
   },
 
   removeItem: (id) => {
