@@ -76,17 +76,19 @@ function toSupabaseRow(sale: CompletedSale) {
 export function syncCompletedSale(sale: CompletedSale): void {
   if (!isCloudEnabled() || !supabase) return
 
-  supabase
-    .from('completed_sales')
-    .upsert(toSupabaseRow(sale), { onConflict: 'id' })
-    .then(({ error }) => {
+  const sync = async () => {
+    try {
+      const { error } = await supabase!
+        .from('completed_sales')
+        .upsert(toSupabaseRow(sale), { onConflict: 'id' })
       if (error) {
         console.warn('[Cloud Sync] Failed to sync sale:', error.message)
       }
-    })
-    .catch(() => {
+    } catch {
       // Network error — silently ignore, local data is safe
-    })
+    }
+  }
+  sync()
 }
 
 
