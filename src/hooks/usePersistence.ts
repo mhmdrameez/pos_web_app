@@ -43,6 +43,14 @@ export function usePersistence() {
           // Suggestions stay off until the next successful local index rebuild.
         }
 
+        // Initialize Supabase cloud sync if configured
+        try {
+          const { initSupabaseFromSettings } = await import('../services/cloud/supabaseSync')
+          await initSupabaseFromSettings()
+        } catch {
+          // Cloud sync stays off
+        }
+
         if (printer.deviceId) {
           printerService.startSilentAutoConnect()
         }

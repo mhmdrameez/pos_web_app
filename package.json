@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
+    "@supabase/supabase-js": "^2.112.4",
     "dexie": "^4.4.4",
     "lucide-react": "^1.24.0",
     "react": "^19.2.7",

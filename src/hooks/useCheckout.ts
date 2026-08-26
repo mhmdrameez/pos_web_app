@@ -101,6 +101,11 @@ export function useCheckout() {
       ingestCompletedSale(sale)
       await persistSuggestionSnapshot()
 
+      // Fire-and-forget cloud sync — never blocks checkout
+      import('../services/cloud/supabaseSync').then(({ syncCompletedSale }) => {
+        syncCompletedSale(sale)
+      }).catch(() => {})
+
       if (savedOrderId) {
         await deleteSavedOrder(savedOrderId)
       }

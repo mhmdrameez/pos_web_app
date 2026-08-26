@@ -221,6 +221,11 @@ export async function cancelCompletedSale(id: string): Promise<void> {
   const { forgetCompletedSale, persistSuggestionSnapshot } = await import('../suggestion')
   forgetCompletedSale(sale)
   await persistSuggestionSnapshot()
+
+  // Fire-and-forget cloud sync for cancellation
+  import('../cloud/supabaseSync').then(({ syncCompletedSale }) => {
+    syncCompletedSale(updated)
+  }).catch(() => {})
 }
 
 export async function getNextInvoiceNumber(): Promise<string> {

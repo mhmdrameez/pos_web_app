@@ -46,9 +46,16 @@ export interface EmailSettings {
   toEmail: string
 }
 
+export interface SupabaseSettings {
+  projectUrl: string
+  anonKey: string
+  enabled: boolean
+}
+
 export interface AppSettings {
   businessName: string
   emailSettings?: EmailSettings
+  supabaseSettings?: SupabaseSettings
 }
 
 export interface PairedPrinter {
