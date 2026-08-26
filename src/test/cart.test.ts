@@ -56,13 +56,19 @@ describe('useCartStore', () => {
       expect(item.quantity).toBe(2)
     })
 
+    it('keeps 29 x 4 and puts the suggested name in brackets', () => {
+      useCartStore.getState().setCurrentAmount('29*4')
+      useCartStore.getState().addItem('Lining', 'suggested')
+      expect(useCartStore.getState().items[0].name).toBe('29 x 4 (Lining)')
+    })
+
     it('updates an item name', () => {
       useCartStore.getState().setCurrentAmount('100')
       useCartStore.getState().addItem()
       const id = useCartStore.getState().items[0].id
       useCartStore.getState().updateItemName(id, 'Milk')
 
-      expect(useCartStore.getState().items[0].name).toBe('Milk')
+      expect(useCartStore.getState().items[0].name).toBe('100 x 1 (Milk)')
     })
   })
 

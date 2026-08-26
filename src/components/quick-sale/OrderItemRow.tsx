@@ -3,6 +3,7 @@ import { useCartStore } from '../../stores/useCartStore'
 import { useAppStore } from '../../stores/useAppStore'
 import { formatRupees } from '../../utils/money'
 import { productSuggestionEngine } from '../../services/suggestion/engine'
+import { productNameFromLine, splitLineDisplay } from '../../services/suggestion/productName'
 
 interface OrderItemRowProps {
   id: string
@@ -16,11 +17,12 @@ export function OrderItemRow({ id, name, unitPricePaise, quantity }: OrderItemRo
   const updateItemName = useCartStore((s) => s.updateItemName)
   const removeItem = useCartStore((s) => s.removeItem)
   const showConfirm = useAppStore((s) => s.showConfirm)
+  const { lineLabel, productName } = splitLineDisplay(name, unitPricePaise, quantity)
 
   function handleDecrease() {
     const result = updateQuantity(id, -1)
     if (result === 'confirm-remove') {
-      showConfirm('Remove Item', `Remove ${name} from the order?`, () => removeItem(id))
+      showConfirm('Remove Item', `Remove ${lineLabel} from the order?`, () => removeItem(id))
     }
   }
 
@@ -29,24 +31,34 @@ export function OrderItemRow({ id, name, unitPricePaise, quantity }: OrderItemRo
   return (
     <div className="flex items-center gap-2 py-3 border-b border-gray-100 last:border-0">
       <div className="flex-1 min-w-0">
-        <input
-          defaultValue={name}
-          onBlur={(event) => {
-            const nextName = event.target.value.trim()
-            updateItemName(id, nextName)
-            if (!nextName) return
-            productSuggestionEngine.learn({
-              displayName: nextName,
-              unitPricePaise,
-              quantity,
-              soldAt: Date.now(),
-              weight: 3,
-              source: 'manual',
-            })
-          }}
-          className="w-full bg-transparent font-medium text-gray-900 outline-none focus:ring-2 focus:ring-primary/30 rounded px-1 -ml-1"
-          aria-label="Item name"
-        />
+        <div className="flex items-baseline gap-1 min-w-0">
+          <span className="font-medium text-gray-900 tabular-nums shrink-0">{lineLabel}</span>
+          <span className="text-xs text-gray-500 flex items-baseline min-w-0">
+            (
+            <input
+              key={`${id}:${productName ?? ''}`}
+              defaultValue={productName ?? ''}
+              onBlur={(event) => {
+                const nextName = event.target.value.trim()
+                updateItemName(id, nextName)
+                if (!nextName) return
+                const learned = productNameFromLine(nextName) ?? nextName
+                productSuggestionEngine.learn({
+                  displayName: learned,
+                  unitPricePaise,
+                  quantity,
+                  soldAt: Date.now(),
+                  weight: 3,
+                  source: 'manual',
+                })
+              }}
+              placeholder="item"
+              className="text-xs text-gray-500 bg-transparent outline-none focus:ring-2 focus:ring-primary/30 rounded px-0.5 min-w-[3rem] max-w-[7rem]"
+              aria-label="Product name"
+            />
+            )
+          </span>
+        </div>
         <p className="text-sm text-gray-500">{formatRupees(unitPricePaise)} each</p>
       </div>
 
@@ -78,7 +90,7 @@ export function OrderItemRow({ id, name, unitPricePaise, quantity }: OrderItemRo
 
       <button
         onClick={() =>
-          showConfirm('Remove Item', `Remove ${name} from the order?`, () => removeItem(id))
+          showConfirm('Remove Item', `Remove ${lineLabel} from the order?`, () => removeItem(id))
         }
         className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50"
         aria-label="Remove item"

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Menu, Printer, X, ChevronRight, ChevronLeft } from 'lucide-react'
 import { AmountDisplay } from './AmountDisplay'
+import { ProductSuggestionBar } from './ProductSuggestionBar'
 import { NumericKeypad } from './NumericKeypad'
 import { OrderPanel } from './OrderPanel'
 import { useAppStore } from '../../stores/useAppStore'
@@ -58,6 +59,7 @@ export function QuickSaleView() {
           </button>
         </div>
 
+        <ProductSuggestionBar />
         <AmountDisplay />
         <NumericKeypad />
       </div>

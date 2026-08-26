@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { ProductSuggestionEngine } from '../services/suggestion/engine'
 import { MIN_CONFIDENCE, STRONG_CONFIDENCE } from '../services/suggestion/scoring'
-import { isGenericLineName, normalizeProductKey } from '../services/suggestion/productName'
+import { isGenericLineName, normalizeProductKey, composeLineName, productNameFromLine } from '../services/suggestion/productName'
 import type { LearnObservation } from '../types/suggestion'
 
 function learn(
@@ -32,6 +32,12 @@ describe('product name helpers', () => {
     expect(isGenericLineName('Item A')).toBe(true)
     expect(isGenericLineName('Lining')).toBe(false)
     expect(isGenericLineName('Cotton Mix')).toBe(false)
+    expect(isGenericLineName('29 x 4 (Lining)')).toBe(false)
+  })
+
+  it('reads the product from a 29 x 4 (name) line', () => {
+    expect(productNameFromLine('29 x 4 (Lining)')).toBe('Lining')
+    expect(composeLineName(2900, 4, 'Lining')).toBe('29 x 4 (Lining)')
   })
 
   it('normalizes product keys', () => {

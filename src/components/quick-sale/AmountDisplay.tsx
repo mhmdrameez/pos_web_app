@@ -1,6 +1,5 @@
 import { useCartStore } from '../../stores/useCartStore'
 import { formatRupees, formatRupeesFromString, parseAmountAndQuantity } from '../../utils/money'
-import { ProductSuggestionBar } from './ProductSuggestionBar'
 
 export function AmountDisplay() {
   const currentAmount = useCartStore((s) => s.currentAmount)
@@ -23,7 +22,7 @@ export function AmountDisplay() {
 
   return (
     <div className="bg-[#f5f6fa] rounded-xl border border-gray-100 px-5 py-3 mb-3">
-      <ProductSuggestionBar />
+      <p className="text-xs text-gray-500 mb-1">Amount</p>
 
       {hasMultiply ? (
         /* Formula view: e.g.  ₹200  ×  2  =  ₹400 */

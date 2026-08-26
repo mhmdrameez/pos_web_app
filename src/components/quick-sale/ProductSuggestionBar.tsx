@@ -33,15 +33,13 @@ export function ProductSuggestionBar() {
   const setChangeOpen = useSuggestionUiStore((s) => s.setChangeOpen)
 
   const entry = parseAmountAndQuantity(currentAmount)
-  const amountLabel = <p className="text-xs text-gray-500 mb-1">Amount</p>
-
-  if (!entry) return amountLabel
 
   function applyManualName(name: string) {
+    if (!entry) return
     productSuggestionEngine.learn({
       displayName: name,
-      unitPricePaise: entry!.unitPricePaise,
-      quantity: entry!.quantity,
+      unitPricePaise: entry.unitPricePaise,
+      quantity: entry.quantity,
       soldAt: Date.now(),
       weight: 3,
       source: 'manual',
@@ -50,60 +48,57 @@ export function ProductSuggestionBar() {
     setChangeOpen(false)
   }
 
-  const show = Boolean(best && !dismissed)
+  const show = Boolean(entry && best && !dismissed)
 
   return (
     <>
-      {show && best ? (
-        <div className="flex items-center gap-1.5 mb-1 h-5 min-w-0 overflow-hidden">
-          <Lightbulb className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-          <p className="text-xs font-semibold text-indigo-950 truncate min-w-0">
-            {best.displayName} — {Math.round(best.confidence * 100)}%
-            {accepted ? <span className="ml-1 font-medium text-green-700">Accepted</span> : null}
-          </p>
-          {alternatives.slice(0, 2).map((option) => (
-            <button
-              key={option.productKey}
-              type="button"
-              onClick={() => pickAlternative(option)}
-              className="text-[11px] px-1.5 py-0 rounded bg-white text-indigo-800 border border-indigo-100 hover:bg-indigo-100 shrink-0 max-w-[5.5rem] truncate"
-            >
-              {option.displayName}
-            </button>
-          ))}
-          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-            <button type="button" className="text-[11px] font-semibold text-indigo-700 hover:underline" onClick={accept}>
-              Accept
-            </button>
-            <button
-              type="button"
-              className="text-[11px] font-medium text-gray-600 hover:underline"
-              onClick={() => setChangeOpen(true)}
-            >
-              Change
-            </button>
-            <button
-              type="button"
-              className="text-[11px] font-medium text-gray-500 hover:underline"
-              onClick={() => {
-                productSuggestionEngine.learn({
-                  displayName: best.displayName,
-                  unitPricePaise: entry.unitPricePaise,
-                  quantity: entry.quantity,
-                  soldAt: Date.now(),
-                  weight: 1,
-                  source: 'rejected',
-                })
-                dismiss()
-              }}
-            >
-              Not this
-            </button>
+      <div className="mb-2 min-h-12">
+        {show && best && entry ? (
+          <div className="flex items-center gap-2 min-h-12 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5">
+            <Lightbulb className="w-4 h-4 text-indigo-600 shrink-0" />
+            <p className="text-sm font-semibold text-indigo-950 truncate min-w-0">
+              {best.displayName} — {Math.round(best.confidence * 100)}%
+              {accepted ? <span className="ml-1.5 text-xs font-medium text-green-700">Accepted</span> : null}
+            </p>
+            {alternatives.slice(0, 2).map((option) => (
+              <button
+                key={option.productKey}
+                type="button"
+                onClick={() => pickAlternative(option)}
+                className="text-xs px-2 py-1 rounded-lg bg-white text-indigo-800 border border-indigo-100 hover:bg-indigo-100 shrink-0 max-w-[6rem] truncate"
+              >
+                {option.displayName}
+              </button>
+            ))}
+            <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+              <Button size="sm" variant="primary" className="text-xs py-1.5 px-3" onClick={accept}>
+                Accept
+              </Button>
+              <Button size="sm" variant="secondary" className="text-xs py-1.5 px-3" onClick={() => setChangeOpen(true)}>
+                Change
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-xs py-1.5 px-3"
+                onClick={() => {
+                  productSuggestionEngine.learn({
+                    displayName: best.displayName,
+                    unitPricePaise: entry.unitPricePaise,
+                    quantity: entry.quantity,
+                    soldAt: Date.now(),
+                    weight: 1,
+                    source: 'rejected',
+                  })
+                  dismiss()
+                }}
+              >
+                Not this
+              </Button>
+            </div>
           </div>
-        </div>
-      ) : (
-        <p className="text-xs text-gray-500 mb-1">Amount</p>
-      )}
+        ) : null}
+      </div>
 
       <ChangeProductModal open={changeOpen} onClose={() => setChangeOpen(false)} onPick={applyManualName} />
     </>

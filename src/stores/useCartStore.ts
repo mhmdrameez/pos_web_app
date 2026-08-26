@@ -8,7 +8,7 @@ import {
   parseAmountInput,
 } from '../utils/money'
 import { generateId } from '../utils/id'
-import { autoLineName } from '../services/suggestion/productName'
+import { composeLineName, productNameFromLine } from '../services/suggestion/productName'
 
 export function getAlphabetName(num: number): string {
   let result = ''
@@ -96,12 +96,14 @@ export const useCartStore = create<CartState>((set, get) => ({
     if (!entry) return false
 
     const trimmed = name?.trim()
+    const productName = trimmed ? productNameFromLine(trimmed) ?? trimmed : null
+    const lineName = composeLineName(entry.unitPricePaise, entry.quantity, productName)
     const newItem: CartItem = {
       id: generateId(),
-      name: trimmed && trimmed.length > 0 ? trimmed : autoLineName(entry.unitPricePaise, entry.quantity),
+      name: lineName,
       unitPricePaise: entry.unitPricePaise,
       quantity: entry.quantity,
-      nameSource: trimmed ? (nameSource ?? 'suggested') : 'auto',
+      nameSource: productNameFromLine(lineName) ? (nameSource ?? 'suggested') : 'auto',
     }
 
     set({
@@ -121,18 +123,30 @@ export const useCartStore = create<CartState>((set, get) => ({
     if (newQty <= 0) return 'confirm-remove'
 
     set({
-      items: items.map((i) => (i.id === id ? { ...i, quantity: newQty } : i)),
+      items: items.map((i) =>
+        i.id === id
+          ? {
+              ...i,
+              quantity: newQty,
+              name: composeLineName(i.unitPricePaise, newQty, productNameFromLine(i.name)),
+            }
+          : i,
+      ),
     })
     return 'updated'
   },
 
   updateItemName: (id, name) => {
     const trimmedName = name.trim()
-    if (!trimmedName) return
     set({
-      items: get().items.map((item) =>
-        item.id === id ? { ...item, name: trimmedName, nameSource: 'manual' as const } : item,
-      ),
+      items: get().items.map((item) => {
+        if (item.id !== id) return item
+        return {
+          ...item,
+          name: composeLineName(item.unitPricePaise, item.quantity, trimmedName || null),
+          nameSource: trimmedName ? ('manual' as const) : ('auto' as const),
+        }
+      }),
     })
   },
 

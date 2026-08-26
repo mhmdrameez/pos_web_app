@@ -9,9 +9,9 @@ import type {
 import {
   autoLineName,
   formatDisplayName,
-  isGenericLineName,
   normalizeProductKey,
   pairId,
+  productNameFromLine,
   quantityKind,
 } from './productName'
 import {
@@ -92,8 +92,9 @@ export class ProductSuggestionEngine {
   }
 
   learn(observation: LearnObservation): void {
-    const key = normalizeProductKey(observation.displayName)
-    if (!key || isGenericLineName(observation.displayName)) return
+    const productName = productNameFromLine(observation.displayName)
+    if (!productName) return
+    const key = normalizeProductKey(productName)
 
     if (observation.source === 'rejected') {
       this.rejected.set(`${key}:${observation.unitPricePaise}`, (this.rejected.get(`${key}:${observation.unitPricePaise}`) ?? 0) + 1)
@@ -105,7 +106,7 @@ export class ProductSuggestionEngine {
       return
     }
 
-    const displayName = formatDisplayName(observation.displayName)
+    const displayName = formatDisplayName(productName)
     const current = this.stats.get(key) ?? emptyStat(key, displayName, observation.soldAt)
     const weight = Math.max(0.25, observation.weight)
 
@@ -137,7 +138,7 @@ export class ProductSuggestionEngine {
   }
 
   unlearn(observation: LearnObservation): void {
-    const key = normalizeProductKey(observation.displayName)
+    const key = normalizeProductKey(productNameFromLine(observation.displayName) ?? observation.displayName)
     const current = this.stats.get(key)
     if (!current) return
     const weight = Math.max(0.25, observation.weight)

@@ -8,11 +8,11 @@ import {
   saveSuggestionIndex,
 } from '../db/database'
 import { productSuggestionEngine } from './engine'
-import { isGenericLineName, normalizeProductKey } from './productName'
+import { normalizeProductKey, productNameFromLine } from './productName'
 import { ACCEPTED_LEARN_WEIGHT, MANUAL_LEARN_WEIGHT, SUGGESTED_LEARN_WEIGHT } from './scoring'
 
 function sourceWeight(source: LineNameSource | undefined, name: string): number | null {
-  if (isGenericLineName(name)) return null
+  if (!productNameFromLine(name)) return null
   if (source === 'manual') return MANUAL_LEARN_WEIGHT
   if (source === 'suggested') return ACCEPTED_LEARN_WEIGHT
   return SUGGESTED_LEARN_WEIGHT
@@ -21,21 +21,24 @@ function sourceWeight(source: LineNameSource | undefined, name: string): number 
 function observationsFromSale(sale: CompletedSale): LearnObservation[] {
   if (sale.status === 'cancelled') return []
   const namedKeys = sale.items
-    .filter((item) => !isGenericLineName(item.name))
-    .map((item) => normalizeProductKey(item.name))
+    .map((item) => productNameFromLine(item.name))
+    .filter((key): key is string => Boolean(key))
+    .map((name) => normalizeProductKey(name))
 
   return sale.items.flatMap((item) => {
+    const productName = productNameFromLine(item.name)
+    if (!productName) return []
     const weight = sourceWeight(item.nameSource, item.name)
     if (weight == null) return []
     return [
       {
-        displayName: item.name,
+        displayName: productName,
         unitPricePaise: item.unitPricePaise,
         quantity: item.quantity,
         soldAt: sale.completedAt,
         weight,
         source: item.nameSource === 'manual' || item.nameSource === 'suggested' ? item.nameSource : 'auto',
-        companionKeys: namedKeys.filter((key) => key !== normalizeProductKey(item.name)),
+        companionKeys: namedKeys.filter((key) => key !== normalizeProductKey(productName)),
       },
     ]
   })
@@ -82,6 +85,7 @@ export async function persistSuggestionSnapshot(): Promise<void> {
 
 export function cartProductKeys(items: CartItem[]): string[] {
   return items
-    .filter((item) => !isGenericLineName(item.name))
-    .map((item) => normalizeProductKey(item.name))
+    .map((item) => productNameFromLine(item.name))
+    .filter((name): name is string => Boolean(name))
+    .map((name) => normalizeProductKey(name))
 }
