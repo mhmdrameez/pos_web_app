@@ -27,6 +27,7 @@ import {
   frequencyScore,
   inferUnit,
   mergePriceBucket,
+  priceBucketKey,
   priceSimilarity,
   quantityScore,
   recencyScore,
@@ -34,6 +35,9 @@ import {
 } from './scoring'
 
 const RECENCY_DECAY_ON_LEARN = 0.97
+
+/** Number of adjacent price buckets to scan in each direction during suggest(). */
+const PRICE_INDEX_RADIUS = 3
 
 function emptyStat(productKey: string, displayName: string, soldAt: number): ProductStat {
   return {
@@ -60,20 +64,32 @@ export class ProductSuggestionEngine {
   private pairs = new Map<string, ProductPairStat>()
   private rejected = new Map<string, number>()
 
+  // --- Dirty tracking: only persist what changed since last clearDirty() ---
+  private dirtyStats = new Set<string>()
+  private dirtyPairs = new Set<string>()
+
+  // --- Price-bucket index: Map<bucketKey, Set<productKey>> for O(1)-ish suggest ---
+  private priceIndex = new Map<number, Set<string>>()
+
   reset(): void {
     this.stats.clear()
     this.pairs.clear()
     this.rejected.clear()
+    this.dirtyStats.clear()
+    this.dirtyPairs.clear()
+    this.priceIndex.clear()
   }
 
   load(stats: ProductStat[], pairs: ProductPairStat[]): void {
     this.reset()
-    for (const stat of stats)
+    for (const stat of stats) {
       this.stats.set(stat.productKey, {
         ...stat,
         observationCount: stat.observationCount ?? Math.max(1, Math.round(stat.totalCount)),
         priceBuckets: [...stat.priceBuckets],
       })
+      this._addToPriceIndex(stat)
+    }
     for (const pair of pairs) this.pairs.set(pair.id, { ...pair })
   }
 
@@ -82,6 +98,33 @@ export class ProductSuggestionEngine {
       stats: [...this.stats.values()].map((stat) => ({ ...stat, priceBuckets: [...stat.priceBuckets] })),
       pairs: [...this.pairs.values()].map((pair) => ({ ...pair })),
     }
+  }
+
+  /** Return only the stats and pairs that changed since the last clearDirty(). */
+  getDirtySnapshot(): { stats: ProductStat[]; pairs: ProductPairStat[]; deletedStatKeys: string[] } {
+    const stats: ProductStat[] = []
+    const deletedStatKeys: string[] = []
+    for (const key of this.dirtyStats) {
+      const stat = this.stats.get(key)
+      if (stat) stats.push({ ...stat, priceBuckets: [...stat.priceBuckets] })
+      else deletedStatKeys.push(key)
+    }
+    const pairs: ProductPairStat[] = []
+    for (const id of this.dirtyPairs) {
+      const pair = this.pairs.get(id)
+      if (pair) pairs.push({ ...pair })
+    }
+    return { stats, pairs, deletedStatKeys }
+  }
+
+  /** Returns true if any stats or pairs have been modified since last clearDirty(). */
+  hasDirty(): boolean {
+    return this.dirtyStats.size > 0 || this.dirtyPairs.size > 0
+  }
+
+  clearDirty(): void {
+    this.dirtyStats.clear()
+    this.dirtyPairs.clear()
   }
 
   getKnownProducts(): { productKey: string; displayName: string }[] {
@@ -102,6 +145,7 @@ export class ProductSuggestionEngine {
       if (existing) {
         existing.rejectedCount += observation.weight
         this.stats.set(key, existing)
+        this.dirtyStats.add(key)
       }
       return
     }
@@ -126,6 +170,8 @@ export class ProductSuggestionEngine {
     current.observationCount += 1
     current.priceBuckets = mergePriceBucket(current.priceBuckets, observation.unitPricePaise, weight)
     this.stats.set(key, current)
+    this.dirtyStats.add(key)
+    this._addToPriceIndex(current)
 
     for (const companion of observation.companionKeys ?? []) {
       if (!companion || companion === key) continue
@@ -134,6 +180,7 @@ export class ProductSuggestionEngine {
       pair.count += weight
       pair.lastSeenAt = observation.soldAt
       this.pairs.set(id, pair)
+      this.dirtyPairs.add(id)
     }
   }
 
@@ -152,8 +199,13 @@ export class ProductSuggestionEngine {
       current.decimalQtyCount = Math.max(0, current.decimalQtyCount - weight)
     }
     current.observationCount = Math.max(0, (current.observationCount ?? 1) - 1)
-    if (current.totalCount < 0.5 || current.observationCount <= 0) this.stats.delete(key)
-    else this.stats.set(key, current)
+    if (current.totalCount < 0.5 || current.observationCount <= 0) {
+      this._removeFromPriceIndex(current)
+      this.stats.delete(key)
+    } else {
+      this.stats.set(key, current)
+    }
+    this.dirtyStats.add(key)
   }
 
   suggest(query: SuggestionQuery): SuggestionResult {
@@ -164,8 +216,11 @@ export class ProductSuggestionEngine {
     const now = query.now ?? Date.now()
     const hasCartContext = query.cartProductKeys.length > 0
 
+    // Use price-bucket index for fast candidate lookup instead of scanning all stats
+    const candidates = this._getCandidatesByPrice(query.unitPricePaise)
+
     const priceMatched: { stat: ProductStat; price: number }[] = []
-    for (const stat of this.stats.values()) {
+    for (const stat of candidates) {
       if (stat.observationCount < MIN_OBSERVATIONS) continue
       const price = priceSimilarity(query.unitPricePaise, stat)
       if (price < MIN_PRICE_SIMILARITY) continue
@@ -222,6 +277,58 @@ export class ProductSuggestionEngine {
     const best = ranked[0] ?? null
     const alternatives = ranked.slice(1, 6)
     return { best, alternatives }
+  }
+
+  // --- Price-bucket index helpers ---
+
+  /** Add all price buckets from a stat to the price index. */
+  private _addToPriceIndex(stat: ProductStat): void {
+    for (const bucket of stat.priceBuckets) {
+      let set = this.priceIndex.get(bucket.paise)
+      if (!set) {
+        set = new Set()
+        this.priceIndex.set(bucket.paise, set)
+      }
+      set.add(stat.productKey)
+    }
+  }
+
+  /** Remove all price bucket entries for a stat from the price index. */
+  private _removeFromPriceIndex(stat: ProductStat): void {
+    for (const bucket of stat.priceBuckets) {
+      const set = this.priceIndex.get(bucket.paise)
+      if (set) {
+        set.delete(stat.productKey)
+        if (set.size === 0) this.priceIndex.delete(bucket.paise)
+      }
+    }
+  }
+
+  /**
+   * Get candidate stats by looking up adjacent price buckets.
+   * Falls back to full scan if the price index is empty (e.g. before first learn).
+   */
+  private _getCandidatesByPrice(pricePaise: number): ProductStat[] {
+    if (this.priceIndex.size === 0) return [...this.stats.values()]
+
+    const bucketKey = priceBucketKey(pricePaise)
+    const bucketStep = 100 // priceBucketKey rounds to nearest 100
+    const seen = new Set<string>()
+    const candidates: ProductStat[] = []
+
+    for (let offset = -PRICE_INDEX_RADIUS; offset <= PRICE_INDEX_RADIUS; offset++) {
+      const bucket = bucketKey + offset * bucketStep
+      const keys = this.priceIndex.get(bucket)
+      if (!keys) continue
+      for (const key of keys) {
+        if (seen.has(key)) continue
+        seen.add(key)
+        const stat = this.stats.get(key)
+        if (stat) candidates.push(stat)
+      }
+    }
+
+    return candidates
   }
 }
 

@@ -2,14 +2,19 @@ import type { CartItem, CompletedSale } from '../../types'
 import type { LearnObservation, LineNameSource } from '../../types/suggestion'
 import {
   db,
+  computeSalesFingerprintFast,
   computeSalesFingerprint,
   getSuggestionMeta,
   loadSuggestionIndex,
   saveSuggestionIndex,
+  incrementalSaveSuggestionStats,
 } from '../db/database'
 import { productSuggestionEngine } from './engine'
 import { normalizeProductKey, productNameFromLine } from './productName'
 import { ACCEPTED_LEARN_WEIGHT, MANUAL_LEARN_WEIGHT, SUGGESTED_LEARN_WEIGHT } from './scoring'
+
+/** Number of sales to process per batch during rebuild, to avoid blocking the main thread. */
+const REBUILD_BATCH_SIZE = 200
 
 function sourceWeight(source: LineNameSource | undefined, name: string): number | null {
   if (!productNameFromLine(name)) return null
@@ -56,18 +61,39 @@ export function forgetCompletedSale(sale: CompletedSale): void {
   }
 }
 
+/** Yield to the main thread so the UI stays responsive during long operations. */
+function yieldToMain(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
+/**
+ * Rebuild the entire suggestion index from all completed sales.
+ * Processes in batches with yielding so the main thread doesn't freeze.
+ */
 export async function rebuildProductSuggestionIndex(): Promise<void> {
   productSuggestionEngine.reset()
-  await db.completedSales.each((sale) => {
-    ingestCompletedSale(sale)
-  })
+
+  // Collect all sale IDs first, then process in batches
+  const allSales = await db.completedSales.toArray()
+  for (let i = 0; i < allSales.length; i += REBUILD_BATCH_SIZE) {
+    const batch = allSales.slice(i, i + REBUILD_BATCH_SIZE)
+    for (const sale of batch) {
+      ingestCompletedSale(sale)
+    }
+    // Yield between batches so the browser doesn't lock up
+    if (i + REBUILD_BATCH_SIZE < allSales.length) {
+      await yieldToMain()
+    }
+  }
+
   const snapshot = productSuggestionEngine.snapshot()
   const fingerprint = await computeSalesFingerprint()
   await saveSuggestionIndex(snapshot.stats, snapshot.pairs, fingerprint)
+  productSuggestionEngine.clearDirty()
 }
 
 export async function ensureProductSuggestionIndex(): Promise<void> {
-  const fingerprint = await computeSalesFingerprint()
+  const fingerprint = await computeSalesFingerprintFast()
   const meta = await getSuggestionMeta()
   if (meta?.fingerprint === fingerprint) {
     const stored = await loadSuggestionIndex()
@@ -77,10 +103,21 @@ export async function ensureProductSuggestionIndex(): Promise<void> {
   await rebuildProductSuggestionIndex()
 }
 
+/**
+ * Persist only the stats/pairs that changed since the last persist.
+ * Falls back to full snapshot if nothing is dirty (no-op).
+ */
 export async function persistSuggestionSnapshot(): Promise<void> {
-  const snapshot = productSuggestionEngine.snapshot()
-  const fingerprint = await computeSalesFingerprint()
-  await saveSuggestionIndex(snapshot.stats, snapshot.pairs, fingerprint)
+  const fingerprint = await computeSalesFingerprintFast()
+
+  if (!productSuggestionEngine.hasDirty()) {
+    // Nothing changed in memory — just update the fingerprint if needed
+    return
+  }
+
+  const { stats, pairs, deletedStatKeys } = productSuggestionEngine.getDirtySnapshot()
+  await incrementalSaveSuggestionStats(stats, pairs, deletedStatKeys, fingerprint)
+  productSuggestionEngine.clearDirty()
 }
 
 export function cartProductKeys(items: CartItem[]): string[] {
@@ -89,3 +126,4 @@ export function cartProductKeys(items: CartItem[]): string[] {
     .filter((name): name is string => Boolean(name))
     .map((name) => normalizeProductKey(name))
 }
+

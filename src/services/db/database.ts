@@ -49,7 +49,7 @@ class QuickSaleDB extends Dexie {
   settings!: Table<AppSettings & { id: string }>
   printerSettings!: Table<PrinterSettings & { id: string }>
   cart!: Table<CartSnapshot & { id: string }>
-  counters!: Table<{ id: string; invoiceSequence: number; orderSequence: number }>
+  counters!: Table<{ id: string; invoiceSequence: number; orderSequence: number; salesCount?: number; latestCompletedAt?: number }>
   productStats!: Table<ProductStat>
   productPairs!: Table<ProductPairStat>
   suggestionMeta!: Table<{ id: string; fingerprint: string; rebuiltAt: number }>
@@ -65,6 +65,19 @@ class QuickSaleDB extends Dexie {
       counters: 'id',
     })
     this.version(2).stores({
+      savedOrders: 'id, orderNumber, status, createdAt, updatedAt',
+      completedSales: 'id, invoiceNumber, completedAt, status',
+      settings: 'id',
+      printerSettings: 'id',
+      cart: 'id',
+      counters: 'id',
+      productStats: 'productKey, lastSoldAt',
+      productPairs: 'id',
+      suggestionMeta: 'id',
+    })
+    // v3: salesCount/latestCompletedAt added to counters (no schema change needed,
+    // they are extra non-indexed fields on the existing 'id' key).
+    this.version(3).stores({
       savedOrders: 'id, orderNumber, status, createdAt, updatedAt',
       completedSales: 'id, invoiceNumber, completedAt, status',
       settings: 'id',
@@ -148,6 +161,19 @@ export async function saveCompletedSale(sale: CompletedSale): Promise<void> {
   const sales = getCompletedSalesBackup().filter((storedSale) => storedSale.id !== sale.id)
   sales.unshift(sale)
   saveCompletedSalesBackup(sales)
+
+  // Incrementally update the sales counter for fast fingerprinting
+  try {
+    const counter = await db.counters.get('default')
+    if (counter) {
+      await db.counters.update('default', {
+        salesCount: (counter.salesCount ?? 0) + 1,
+        latestCompletedAt: Math.max(counter.latestCompletedAt ?? 0, sale.completedAt),
+      })
+    }
+  } catch {
+    // Non-critical — fingerprint will fall back to full scan
+  }
 }
 
 export async function getSalesByDateRange(
@@ -190,6 +216,8 @@ export async function cancelCompletedSale(id: string): Promise<void> {
   const backup = getCompletedSalesBackup().map((s) => (s.id === id ? updated : s))
   saveCompletedSalesBackup(backup)
 
+  await decrementSalesCounter()
+
   const { forgetCompletedSale, persistSuggestionSnapshot } = await import('../suggestion')
   forgetCompletedSale(sale)
   await persistSuggestionSnapshot()
@@ -226,6 +254,26 @@ export async function saveSuggestionIndex(
   })
 }
 
+/** Incrementally save only the changed stats/pairs instead of clearing and rewriting everything. */
+export async function incrementalSaveSuggestionStats(
+  stats: ProductStat[],
+  pairs: ProductPairStat[],
+  deletedStatKeys: string[],
+  fingerprint: string,
+): Promise<void> {
+  await db.transaction('rw', db.productStats, db.productPairs, db.suggestionMeta, async () => {
+    if (stats.length > 0) await db.productStats.bulkPut(stats)
+    if (pairs.length > 0) await db.productPairs.bulkPut(pairs)
+    if (deletedStatKeys.length > 0) await db.productStats.bulkDelete(deletedStatKeys)
+    await db.suggestionMeta.put({ id: 'default', fingerprint, rebuiltAt: Date.now() })
+  })
+}
+
+/** Update just the fingerprint/meta without touching stats or pairs. */
+export async function saveSuggestionFingerprint(fingerprint: string): Promise<void> {
+  await db.suggestionMeta.put({ id: 'default', fingerprint, rebuiltAt: Date.now() })
+}
+
 export async function loadSuggestionIndex(): Promise<{ stats: ProductStat[]; pairs: ProductPairStat[] }> {
   const [stats, pairs] = await Promise.all([db.productStats.toArray(), db.productPairs.toArray()])
   return { stats, pairs }
@@ -239,6 +287,20 @@ export async function upsertProductPair(pair: ProductPairStat): Promise<void> {
   await db.productPairs.put(pair)
 }
 
+/**
+ * O(1) fingerprint from stored counters. Falls back to full scan if counters
+ * haven't been populated yet (first run after migration to v3).
+ */
+export async function computeSalesFingerprintFast(): Promise<string> {
+  const counter = await db.counters.get('default')
+  if (counter && counter.salesCount != null && counter.salesCount > 0) {
+    return `${counter.salesCount}:${counter.latestCompletedAt ?? 0}`
+  }
+  // Fallback: full scan + initialize counters for next time
+  return computeSalesFingerprint()
+}
+
+/** Full O(N) scan — used only as fallback and during full rebuild. Also seeds the counters. */
 export async function computeSalesFingerprint(): Promise<string> {
   let count = 0
   let latest = 0
@@ -247,6 +309,15 @@ export async function computeSalesFingerprint(): Promise<string> {
     count += 1
     latest = Math.max(latest, sale.completedAt)
   })
+  // Seed the counter so future calls can use the fast path
+  try {
+    const counter = await db.counters.get('default')
+    if (counter) {
+      await db.counters.update('default', { salesCount: count, latestCompletedAt: latest })
+    }
+  } catch {
+    // Non-critical
+  }
   return `${count}:${latest}`
 }
 
@@ -261,6 +332,23 @@ export async function initializeDatabase(): Promise<void> {
   }
   const counter = await db.counters.get('default')
   if (!counter) {
-    await db.counters.put({ id: 'default', invoiceSequence: 0, orderSequence: 0 })
+    await db.counters.put({ id: 'default', invoiceSequence: 0, orderSequence: 0, salesCount: 0, latestCompletedAt: 0 })
+  } else if (counter.salesCount == null) {
+    // Migrate existing counter row to include sales tracking fields
+    await db.counters.update('default', { salesCount: 0, latestCompletedAt: 0 })
+  }
+}
+
+/** Decrement the sales counter (used when cancelling a sale). */
+export async function decrementSalesCounter(): Promise<void> {
+  try {
+    const counter = await db.counters.get('default')
+    if (counter && counter.salesCount != null && counter.salesCount > 0) {
+      await db.counters.update('default', {
+        salesCount: counter.salesCount - 1,
+      })
+    }
+  } catch {
+    // Non-critical
   }
 }

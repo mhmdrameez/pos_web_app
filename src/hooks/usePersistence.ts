@@ -31,8 +31,11 @@ export function usePersistence() {
           discountPaise: cart.discountPaise,
         })
         loadPrinterSettings(printer)
+
+        // Show the UI immediately — don't block on suggestion index
         setDbReady(true)
 
+        // Load suggestions in the background; engine returns empty results until ready
         try {
           const { ensureProductSuggestionIndex } = await import('../services/suggestion')
           await ensureProductSuggestionIndex()

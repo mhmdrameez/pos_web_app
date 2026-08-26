@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
-import { Eye, EyeOff, Mail, Loader2, CheckCircle2, AlertCircle, Send } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Eye, EyeOff, Mail, Loader2, CheckCircle2, AlertCircle, Send, Download, Upload, HardDrive } from 'lucide-react'
 import { useAppStore } from '../../stores/useAppStore'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { getSettings, saveSettings } from '../../services/db/database'
 import { sendTestEmail } from '../../services/email/emailService'
+import { exportBackup, importBackup } from '../../services/db/backupRestore'
 import type { EmailSettings } from '../../types'
 
 interface FormState {
@@ -28,6 +29,9 @@ export function AppSettingsModal() {
   const [testing, setTesting] = useState(false)
   const [testStatus, setTestStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [testError, setTestError] = useState('')
+  const [backingUp, setBackingUp] = useState(false)
+  const [restoring, setRestoring] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!isOpen) return
@@ -97,6 +101,48 @@ export function AppSettingsModal() {
   }
 
   const hasEmailConfig = form.resendApiKey.trim() && form.fromEmail.trim() && form.toEmail.trim()
+
+  async function handleBackup() {
+    setBackingUp(true)
+    try {
+      const settings = await getSettings()
+      await exportBackup(settings.businessName)
+      addToast('success', 'Backup downloaded successfully')
+    } catch {
+      addToast('error', 'Failed to create backup')
+    } finally {
+      setBackingUp(false)
+    }
+  }
+
+  async function handleRestore(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Reset the input so the same file can be selected again
+    if (fileInputRef.current) fileInputRef.current.value = ''
+
+    const confirmed = window.confirm(
+      'This will replace ALL existing data (sales, orders, settings, suggestions) with the backup file. This cannot be undone.\n\nContinue?',
+    )
+    if (!confirmed) return
+
+    setRestoring(true)
+    try {
+      const result = await importBackup(file)
+      addToast(
+        'success',
+        `Restored ${result.salesCount} sales, ${result.ordersCount} orders, ${result.productsCount} products`,
+      )
+      // Reload the page to reinitialize all stores from the restored data
+      setTimeout(() => window.location.reload(), 1500)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to restore backup'
+      addToast('error', message)
+    } finally {
+      setRestoring(false)
+    }
+  }
 
   return (
     <Modal open={isOpen} onClose={closeAppSettings} title="Application Settings" size="md">
@@ -216,6 +262,69 @@ export function AppSettingsModal() {
         <div className="bg-indigo-50 rounded-xl px-4 py-3 text-sm text-indigo-700">
           <strong>Daily Digest:</strong> A summary of all daily invoices is automatically sent to
           the above email at <strong>10:00 PM</strong> every night (when this page is open).
+        </div>
+
+        {/* Backup & Restore Section */}
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <HardDrive className="w-4 h-4 text-indigo-500" />
+            <h3 className="text-sm font-semibold text-gray-800 uppercase tracking-wide">
+              Data Management
+            </h3>
+          </div>
+
+          <div className="space-y-3 bg-gray-50 rounded-xl p-4">
+            <p className="text-xs text-gray-500">
+              Download a backup of all your data (sales, orders, settings, product suggestions) or restore from a previous backup.
+            </p>
+
+            <div className="flex items-center gap-3">
+              <Button
+                id="backup-btn"
+                type="button"
+                variant="secondary"
+                onClick={handleBackup}
+                disabled={backingUp || restoring}
+                className="flex items-center gap-2"
+              >
+                {backingUp ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
+                {backingUp ? 'Downloading…' : 'Download Backup'}
+              </Button>
+
+              <Button
+                id="restore-btn"
+                type="button"
+                variant="secondary"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={backingUp || restoring}
+                className="flex items-center gap-2"
+              >
+                {restoring ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Upload className="w-4 h-4" />
+                )}
+                {restoring ? 'Restoring…' : 'Restore Backup'}
+              </Button>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json"
+                onChange={handleRestore}
+                className="hidden"
+                aria-label="Select backup file"
+              />
+            </div>
+
+            <div className="bg-amber-50 rounded-lg px-3 py-2 text-xs text-amber-700">
+              <strong>Warning:</strong> Restoring will replace all existing data. Make sure to download a backup first.
+            </div>
+          </div>
         </div>
 
         {/* Actions */}
