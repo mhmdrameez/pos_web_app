@@ -90,6 +90,7 @@ export type SidebarView =
   | 'quick-sale'
   | 'saved-orders'
   | 'sales-history'
+  | 'products'
   | 'printer-settings'
   | 'app-settings'
 

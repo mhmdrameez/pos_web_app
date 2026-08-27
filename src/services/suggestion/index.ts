@@ -127,3 +127,25 @@ export function cartProductKeys(items: CartItem[]): string[] {
     .map((name) => normalizeProductKey(name))
 }
 
+export async function addManualProduct(displayName: string, unitPricePaise: number, quantity = 1): Promise<void> {
+  productSuggestionEngine.learn({
+    displayName,
+    unitPricePaise,
+    quantity,
+    soldAt: Date.now(),
+    weight: MANUAL_LEARN_WEIGHT,
+    source: 'manual',
+  })
+  await persistSuggestionSnapshot()
+}
+
+export async function removeManualProduct(productKey: string): Promise<void> {
+  productSuggestionEngine.removeProduct(productKey)
+  await persistSuggestionSnapshot()
+}
+
+export function getKnownProductStats() {
+  return productSuggestionEngine.getAllProductStats()
+}
+
+

@@ -15,7 +15,6 @@ import {
   Clock,
 } from 'lucide-react'
 import { useAppStore } from '../../stores/useAppStore'
-import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { getSettings, saveSettings } from '../../services/db/database'
 import { sendTestEmail } from '../../services/email/emailService'
@@ -40,9 +39,7 @@ interface FormState {
   toEmail: string
 }
 
-export function AppSettingsModal() {
-  const isOpen = useAppStore((s) => s.isAppSettingsOpen)
-  const closeAppSettings = useAppStore((s) => s.closeAppSettings)
+export function AppSettingsView() {
   const addToast = useAppStore((s) => s.addToast)
 
   const [form, setForm] = useState<FormState>({
@@ -86,7 +83,6 @@ export function AppSettingsModal() {
   }, [])
 
   useEffect(() => {
-    if (!isOpen) return
     getSettings().then((s) => {
       if (s.emailSettings) {
         setForm({
@@ -109,7 +105,7 @@ export function AppSettingsModal() {
         setAutoBackup10pm(s.backupSettings.autoBackup10pmEnabled !== false)
       }
     })
-  }, [isOpen])
+  }, [])
 
   function handleChange(field: keyof FormState, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -157,7 +153,6 @@ export function AppSettingsModal() {
       }
 
       addToast('success', 'Settings saved')
-      closeAppSettings()
     } catch {
       addToast('error', 'Failed to save settings')
     } finally {
@@ -318,8 +313,9 @@ export function AppSettingsModal() {
   }
 
   return (
-    <Modal open={isOpen} onClose={closeAppSettings} title="Application Settings" size="md">
-      <div className="space-y-6">
+    <div className="flex-1 overflow-y-auto p-4 lg:p-6">
+      <h2 className="text-xl font-semibold text-gray-900 mb-6">Application Settings</h2>
+      <div className="max-w-2xl space-y-6">
         {/* Email Integration Section */}
         <div>
           <div className="flex items-center gap-2 mb-4">
@@ -713,11 +709,7 @@ export function AppSettingsModal() {
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex justify-end gap-3 pt-2">
-          <Button type="button" variant="secondary" onClick={closeAppSettings}>
-            Cancel
-          </Button>
+        <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
           <Button
             id="save-settings-btn"
             type="button"
@@ -729,6 +721,6 @@ export function AppSettingsModal() {
           </Button>
         </div>
       </div>
-    </Modal>
+    </div>
   )
 }

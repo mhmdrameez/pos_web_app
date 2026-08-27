@@ -3,10 +3,11 @@ import { Sidebar } from '../ui/Sidebar'
 import { QuickSaleView } from '../quick-sale/QuickSaleView'
 import { SavedOrdersView } from '../saved-orders/SavedOrdersView'
 import { SalesHistoryView } from '../sales-history/SalesHistoryView'
+import { ProductsView } from '../products/ProductsView'
 import { CustomerModal } from '../quick-sale/CustomerModal'
 import { CheckoutModal } from '../quick-sale/CheckoutModal'
 import { PrinterSettingsModal } from '../printer/PrinterSettingsModal'
-import { AppSettingsModal } from '../settings/AppSettingsModal'
+import { AppSettingsView } from '../settings/AppSettingsView'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { ToastContainer } from '../ui/Toast'
 
@@ -18,13 +19,16 @@ export function AppLayout() {
     switch (activeSidebarView) {
       case 'quick-sale':
         return <QuickSaleView />
+      case 'products':
+        return <ProductsView />
       case 'saved-orders':
         return <SavedOrdersView />
       case 'sales-history':
         return <SalesHistoryView />
       case 'printer-settings':
-      case 'app-settings':
         return <QuickSaleView />
+      case 'app-settings':
+        return <AppSettingsView />
       default:
         return <QuickSaleView />
     }
@@ -49,7 +53,6 @@ export function AppLayout() {
       <CustomerModal />
       <CheckoutModal />
       <PrinterSettingsModal />
-      <AppSettingsModal />
       <ConfirmDialog />
       <ToastContainer />
     </div>

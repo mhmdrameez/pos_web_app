@@ -199,4 +199,40 @@ describe('product suggestion engine', () => {
     expect(elapsed).toBeLessThan(50)
     expect(result.best?.displayName).toBe('Lining')
   })
+
+  it('supports adding manual products and listing stats', () => {
+    engine.learn({
+      displayName: 'Cotton Shirt',
+      unitPricePaise: 25000,
+      quantity: 1,
+      soldAt: Date.now(),
+      weight: 3,
+      source: 'manual',
+    })
+    const stats = engine.getAllProductStats()
+    expect(stats.length).toBe(1)
+    expect(stats[0].displayName).toBe('Cotton Shirt')
+    expect(stats[0].minPricePaise).toBe(25000)
+
+    const result = engine.suggest({ unitPricePaise: 25000, quantity: 1, cartProductKeys: [] })
+    expect(result.best?.displayName).toBe('Cotton Shirt')
+  })
+
+  it('supports removing a product completely', () => {
+    engine.learn({
+      displayName: 'Silk Saree',
+      unitPricePaise: 150000,
+      quantity: 1,
+      soldAt: Date.now(),
+      weight: 3,
+      source: 'manual',
+    })
+    expect(engine.getAllProductStats().length).toBe(1)
+    engine.removeProduct('silk saree')
+    expect(engine.getAllProductStats().length).toBe(0)
+
+    const result = engine.suggest({ unitPricePaise: 150000, quantity: 1, cartProductKeys: [] })
+    expect(result.best).toBeNull()
+  })
 })
+

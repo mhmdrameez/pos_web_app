@@ -134,6 +134,22 @@ export class ProductSuggestionEngine {
       .map((stat) => ({ productKey: stat.productKey, displayName: stat.displayName }))
   }
 
+  getAllProductStats(): ProductStat[] {
+    return [...this.stats.values()]
+      .filter((stat) => stat.totalCount > 0)
+      .sort((a, b) => b.lastSoldAt - a.lastSoldAt)
+      .map((stat) => ({ ...stat, priceBuckets: [...stat.priceBuckets] }))
+  }
+
+  removeProduct(productKey: string): void {
+    const key = normalizeProductKey(productKey)
+    const current = this.stats.get(key)
+    if (!current) return
+    this._removeFromPriceIndex(current)
+    this.stats.delete(key)
+    this.dirtyStats.add(key)
+  }
+
   learn(observation: LearnObservation): void {
     const productName = productNameFromLine(observation.displayName)
     if (!productName) return
