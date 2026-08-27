@@ -12,7 +12,6 @@ import {
   HardDrive,
   Cloud,
   RefreshCw,
-  Clock,
 } from 'lucide-react'
 import { useAppStore } from '../../stores/useAppStore'
 import { Button } from '../ui/Button'
@@ -72,7 +71,6 @@ export function AppSettingsView() {
   const [googleDriveConnected, setGoogleDriveConnected] = useState(false)
   const [connectingDrive, setConnectingDrive] = useState(false)
   const [uploadingDrive, setUploadingDrive] = useState(false)
-  const [autoBackup10pm, setAutoBackup10pm] = useState(true)
   const [autoUploadDriveDaily, setAutoUploadDriveDaily] = useState(true)
 
   useEffect(() => {
@@ -100,9 +98,6 @@ export function AppSettingsView() {
         setGoogleClientId(s.googleDriveSettings.clientId || '')
         setGoogleDriveConnected(Boolean(s.googleDriveSettings.enabled && s.googleDriveSettings.accessToken))
         setAutoUploadDriveDaily(s.googleDriveSettings.autoUploadDaily !== false)
-      }
-      if (s.backupSettings) {
-        setAutoBackup10pm(s.backupSettings.autoBackup10pmEnabled !== false)
       }
     })
   }, [])
@@ -132,17 +127,11 @@ export function AppSettingsView() {
         autoUploadDaily: autoUploadDriveDaily,
       }
 
-      const backupSettings = {
-        autoBackup10pmEnabled: autoBackup10pm,
-        lastBackupDate: current.backupSettings?.lastBackupDate,
-      }
-
       await saveSettings({
         ...current,
         emailSettings: form.resendApiKey.trim() ? emailSettings : undefined,
         supabaseSettings,
         googleDriveSettings,
-        backupSettings,
       })
 
       // Re-initialize Supabase client with updated settings
@@ -477,34 +466,6 @@ export function AppSettingsView() {
                 className="hidden"
                 aria-label="Select backup file"
               />
-            </div>
-
-            {/* 10 PM Automatic Daily Backup Toggle */}
-            <div className="pt-2 border-t border-gray-200/80 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-indigo-500" />
-                  <span className="text-sm font-medium text-gray-700">
-                    Auto-download backup at 10:00 PM everyday
-                  </span>
-                </div>
-                <button
-                  id="auto-backup-10pm-toggle"
-                  type="button"
-                  role="switch"
-                  aria-checked={autoBackup10pm}
-                  onClick={() => setAutoBackup10pm((v) => !v)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    autoBackup10pm ? 'bg-indigo-500' : 'bg-gray-300'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      autoBackup10pm ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
             </div>
 
             {/* Google Drive Configuration Sub-section */}

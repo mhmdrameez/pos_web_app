@@ -63,6 +63,7 @@ export interface GoogleDriveSettings {
 
 export interface BackupSettings {
   autoBackup10pmEnabled: boolean
+  autoBackupFrequency?: '10pm' | '12h'
   lastBackupDate?: string
 }
 

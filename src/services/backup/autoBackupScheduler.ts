@@ -12,63 +12,90 @@ import { getSettings, saveSettings } from '../db/database'
 import { exportBackup } from '../db/backupRestore'
 import { uploadCurrentBackupToGoogleDrive } from '../google/googleDriveService'
 
-const LAST_BACKUP_SENT_KEY = 'quick-sale-pos:backup-10pm-last-sent'
+const LAST_BACKUP_SENT_KEY = 'quick-sale-pos:backup-last-sent'
 let backupSchedulerTimer: ReturnType<typeof setTimeout> | null = null
 
-function getMsUntilNextTenPM(): number {
+function getBlockKey(frequency: '10pm' | '12h'): string {
   const now = new Date()
-  const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 22, 0, 0, 0)
-  if (target.getTime() <= now.getTime()) {
-    // Already past 10 PM today — schedule for tomorrow
-    target.setDate(target.getDate() + 1)
+  const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  
+  if (frequency === '12h') {
+    if (now.getHours() < 10) {
+      const prev = new Date(now)
+      prev.setDate(prev.getDate() - 1)
+      return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}-${String(prev.getDate()).padStart(2, '0')}-22`
+    } else if (now.getHours() < 22) {
+      return `${dateStr}-10`
+    } else {
+      return `${dateStr}-22`
+    }
+  } else {
+    // 10pm only.
+    if (now.getHours() < 22) {
+      const prev = new Date(now)
+      prev.setDate(prev.getDate() - 1)
+      return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}-${String(prev.getDate()).padStart(2, '0')}-22`
+    } else {
+      return `${dateStr}-22`
+    }
   }
-  return target.getTime() - now.getTime()
 }
 
-function todayKey(): string {
+function getMsUntilNextTarget(frequency: '10pm' | '12h'): number {
   const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const target10am = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 10, 0, 0, 0)
+  const target10pm = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 22, 0, 0, 0)
+
+  if (frequency === '12h') {
+    if (now.getTime() < target10am.getTime()) return target10am.getTime() - now.getTime()
+    if (now.getTime() < target10pm.getTime()) return target10pm.getTime() - now.getTime()
+    
+    target10am.setDate(target10am.getDate() + 1)
+    return target10am.getTime() - now.getTime()
+  } else {
+    if (now.getTime() < target10pm.getTime()) return target10pm.getTime() - now.getTime()
+    
+    target10pm.setDate(target10pm.getDate() + 1)
+    return target10pm.getTime() - now.getTime()
+  }
 }
 
-function wasBackupAlreadyRunToday(): boolean {
+function wasCurrentBlockRun(frequency: '10pm' | '12h'): boolean {
   try {
     const stored = localStorage.getItem(LAST_BACKUP_SENT_KEY)
-    return stored === todayKey()
+    return stored === getBlockKey(frequency)
   } catch {
     return false
   }
 }
 
-function markBackupRunToday(): void {
+function markCurrentBlockRun(frequency: '10pm' | '12h'): void {
   try {
-    localStorage.setItem(LAST_BACKUP_SENT_KEY, todayKey())
+    localStorage.setItem(LAST_BACKUP_SENT_KEY, getBlockKey(frequency))
   } catch {
     // non-critical
   }
 }
 
-async function runDaily10PmBackup(): Promise<void> {
-  if (wasBackupAlreadyRunToday()) {
-    scheduleNext10PmBackup()
-    return
-  }
-
+async function runScheduledBackup(): Promise<void> {
   try {
     const settings = await getSettings()
-    // Auto-backup runs by default unless explicitly disabled in backupSettings
+    const frequency = settings.backupSettings?.autoBackupFrequency || '10pm'
     const isAutoBackupEnabled = settings.backupSettings?.autoBackup10pmEnabled !== false
 
     if (!isAutoBackupEnabled) {
-      scheduleNext10PmBackup()
+      scheduleNextBackup(frequency)
+      return
+    }
+
+    if (wasCurrentBlockRun(frequency)) {
+      scheduleNextBackup(frequency)
       return
     }
 
     const businessName = settings.businessName || 'Quick Sale POS'
 
-    // 1. Trigger local file download
-    await exportBackup(businessName)
-
-    // 2. If Google Drive is enabled with auto-upload, upload to Drive
+    // 1. If Google Drive is enabled with auto-upload, upload to Drive
     if (settings.googleDriveSettings?.enabled && settings.googleDriveSettings?.autoUploadDaily !== false) {
       try {
         await uploadCurrentBackupToGoogleDrive(businessName)
@@ -77,42 +104,58 @@ async function runDaily10PmBackup(): Promise<void> {
       }
     }
 
-    markBackupRunToday()
+    markCurrentBlockRun(frequency)
 
     // Update settings with last backup date
     await saveSettings({
       ...settings,
       backupSettings: {
         autoBackup10pmEnabled: true,
+        autoBackupFrequency: frequency,
         lastBackupDate: new Date().toISOString(),
       },
     })
   } catch (err) {
-    console.error('[Auto Backup] 10 PM backup error:', err)
+    console.error('[Auto Backup] Scheduled backup error:', err)
   } finally {
-    scheduleNext10PmBackup()
+    // Note: We need to re-fetch settings in case frequency changed
+    getSettings().then(s => {
+       const freq = s.backupSettings?.autoBackupFrequency || '10pm'
+       scheduleNextBackup(freq)
+    })
   }
 }
 
-function scheduleNext10PmBackup(): void {
+function scheduleNextBackup(frequency: '10pm' | '12h'): void {
   if (backupSchedulerTimer !== null) {
     clearTimeout(backupSchedulerTimer)
   }
-  const msUntil = getMsUntilNextTenPM()
+  const msUntil = getMsUntilNextTarget(frequency)
   backupSchedulerTimer = setTimeout(() => {
-    void runDaily10PmBackup()
+    void runScheduledBackup()
   }, msUntil)
 }
 
 /**
- * Start the 10 PM daily backup scheduler on application boot.
+ * Start the backup scheduler on application boot.
+ * Also checks if we missed the current block and runs immediately if so.
  */
 export function startDailyBackupScheduler(): void {
-  scheduleNext10PmBackup()
+  getSettings().then(s => {
+    const frequency = s.backupSettings?.autoBackupFrequency || '10pm'
+    const isAutoBackupEnabled = s.backupSettings?.autoBackup10pmEnabled !== false
+    
+    if (isAutoBackupEnabled && !wasCurrentBlockRun(frequency)) {
+      // Missed the current block's backup (e.g. app was closed at 10:00/22:00)
+      void runScheduledBackup()
+    } else {
+      scheduleNextBackup(frequency)
+    }
+  })
 }
 
 /**
- * Manually trigger the 10 PM backup flow immediately (for testing or manual run).
+ * Manually trigger the backup flow immediately (for testing or manual run).
  */
 export async function triggerDailyBackupNow(): Promise<{
   success: boolean
@@ -123,6 +166,7 @@ export async function triggerDailyBackupNow(): Promise<{
   try {
     const settings = await getSettings()
     const businessName = settings.businessName || 'Quick Sale POS'
+    const frequency = settings.backupSettings?.autoBackupFrequency || '10pm'
 
     const filename = await exportBackup(businessName)
     let driveUploaded = false
@@ -132,7 +176,7 @@ export async function triggerDailyBackupNow(): Promise<{
       driveUploaded = driveResult.success
     }
 
-    markBackupRunToday()
+    markCurrentBlockRun(frequency)
     return { success: true, downloadedFilename: filename, driveUploaded }
   } catch (err) {
     return {
