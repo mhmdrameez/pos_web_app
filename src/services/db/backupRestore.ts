@@ -17,9 +17,9 @@ export interface BackupData {
 }
 
 /**
- * Export all IndexedDB tables into a single JSON backup file and trigger a download.
+ * Generate a complete BackupData object from all IndexedDB tables.
  */
-export async function exportBackup(businessName: string): Promise<void> {
+export async function generateBackupData(): Promise<BackupData> {
   const [
     completedSales,
     savedOrders,
@@ -42,7 +42,7 @@ export async function exportBackup(businessName: string): Promise<void> {
     db.suggestionMeta.toArray(),
   ])
 
-  const backup: BackupData = {
+  return {
     version: 1,
     createdAt: new Date().toISOString(),
     tables: {
@@ -57,14 +57,27 @@ export async function exportBackup(businessName: string): Promise<void> {
       suggestionMeta,
     },
   }
+}
 
+/**
+ * Generate backup filename based on business name.
+ */
+export function getBackupFilename(businessName: string): string {
+  const safeName = businessName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() || 'pos'
+  const dateStr = new Date().toISOString().slice(0, 10)
+  return `${safeName}_backup_${dateStr}.json`
+}
+
+/**
+ * Export all IndexedDB tables into a single JSON backup file and trigger a download.
+ */
+export async function exportBackup(businessName: string): Promise<string> {
+  const backup = await generateBackupData()
   const json = JSON.stringify(backup, null, 2)
   const blob = new Blob([json], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
 
-  const safeName = businessName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() || 'pos'
-  const dateStr = new Date().toISOString().slice(0, 10)
-  const filename = `${safeName}_backup_${dateStr}.json`
+  const filename = getBackupFilename(businessName)
 
   const a = document.createElement('a')
   a.href = url
@@ -73,6 +86,8 @@ export async function exportBackup(businessName: string): Promise<void> {
   a.click()
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
+
+  return filename
 }
 
 /**

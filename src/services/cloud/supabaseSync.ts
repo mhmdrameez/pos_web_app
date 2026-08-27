@@ -1,9 +1,60 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { CompletedSale } from '../../types'
-import { getSettings } from '../db/database'
+import { getSettings, getCompletedSales } from '../db/database'
 
 let supabase: SupabaseClient | null = null
 let cloudEnabled = false
+let syncIntervalTimer: ReturnType<typeof setInterval> | null = null
+let isSyncingInProgress = false
+let lastSyncTimestamp: number | null = null
+let lastSyncError: string | null = null
+
+type SyncListener = (status: {
+  isSyncing: boolean
+  lastSyncTimestamp: number | null
+  lastSyncError: string | null
+  cloudEnabled: boolean
+}) => void
+
+const syncListeners = new Set<SyncListener>()
+
+function notifyListeners() {
+  const status = {
+    isSyncing: isSyncingInProgress,
+    lastSyncTimestamp,
+    lastSyncError,
+    cloudEnabled: isCloudEnabled(),
+  }
+  syncListeners.forEach((listener) => {
+    try {
+      listener(status)
+    } catch {
+      // Ignore listener error
+    }
+  })
+}
+
+export function subscribeCloudSyncStatus(listener: SyncListener): () => void {
+  syncListeners.add(listener)
+  listener({
+    isSyncing: isSyncingInProgress,
+    lastSyncTimestamp,
+    lastSyncError,
+    cloudEnabled: isCloudEnabled(),
+  })
+  return () => {
+    syncListeners.delete(listener)
+  }
+}
+
+export function getCloudSyncState() {
+  return {
+    isSyncing: isSyncingInProgress,
+    lastSyncTimestamp,
+    lastSyncError,
+    cloudEnabled: isCloudEnabled(),
+  }
+}
 
 /**
  * Initialize (or re-initialize) the Supabase client with the given credentials.
@@ -14,14 +65,21 @@ export function initSupabase(projectUrl: string, anonKey: string, enabled: boole
   if (!enabled || !projectUrl || !anonKey) {
     supabase = null
     cloudEnabled = false
+    stopPeriodicCloudSync()
+    notifyListeners()
     return
   }
   try {
     supabase = createClient(projectUrl, anonKey)
+    startPeriodicCloudSync()
+    // Perform initial catch-up sync in background
+    void syncAllPendingSales()
   } catch {
     supabase = null
     cloudEnabled = false
+    stopPeriodicCloudSync()
   }
+  notifyListeners()
 }
 
 /**
@@ -48,7 +106,7 @@ export function isCloudEnabled(): boolean {
 /**
  * Convert a CompletedSale to the Supabase row format (snake_case columns).
  */
-function toSupabaseRow(sale: CompletedSale) {
+export function toSupabaseRow(sale: CompletedSale) {
   return {
     id: sale.id,
     invoice_number: sale.invoiceNumber,
@@ -82,15 +140,101 @@ export function syncCompletedSale(sale: CompletedSale): void {
         .from('completed_sales')
         .upsert(toSupabaseRow(sale), { onConflict: 'id' })
       if (error) {
+        lastSyncError = error.message
         console.warn('[Cloud Sync] Failed to sync sale:', error.message)
+      } else {
+        lastSyncTimestamp = Date.now()
+        lastSyncError = null
       }
-    } catch {
-      // Network error — silently ignore, local data is safe
+      notifyListeners()
+    } catch (err) {
+      lastSyncError = err instanceof Error ? err.message : 'Network error'
+      notifyListeners()
     }
   }
-  sync()
+  void sync()
 }
 
+/**
+ * Batch sync all local completed sales to Supabase (e.g. yesterday's, today's, historical).
+ * Upserts in batches of 50 items.
+ */
+export async function syncAllPendingSales(): Promise<{ success: boolean; syncedCount: number; error?: string }> {
+  if (!isCloudEnabled() || !supabase) {
+    return { success: false, syncedCount: 0, error: 'Cloud sync is not enabled' }
+  }
+
+  if (isSyncingInProgress) {
+    return { success: true, syncedCount: 0 }
+  }
+
+  isSyncingInProgress = true
+  notifyListeners()
+
+  try {
+    const sales = await getCompletedSales()
+    if (sales.length === 0) {
+      lastSyncTimestamp = Date.now()
+      lastSyncError = null
+      isSyncingInProgress = false
+      notifyListeners()
+      return { success: true, syncedCount: 0 }
+    }
+
+    const batchSize = 50
+    let totalSynced = 0
+
+    for (let i = 0; i < sales.length; i += batchSize) {
+      const batch = sales.slice(i, i + batchSize)
+      const rows = batch.map(toSupabaseRow)
+
+      const { error } = await supabase!
+        .from('completed_sales')
+        .upsert(rows, { onConflict: 'id' })
+
+      if (error) {
+        throw new Error(error.message)
+      }
+      totalSynced += batch.length
+    }
+
+    lastSyncTimestamp = Date.now()
+    lastSyncError = null
+    return { success: true, syncedCount: totalSynced }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to sync sales'
+    lastSyncError = message
+    console.warn('[Cloud Sync] Batch sync error:', message)
+    return { success: false, syncedCount: 0, error: message }
+  } finally {
+    isSyncingInProgress = false
+    notifyListeners()
+  }
+}
+
+/**
+ * Start periodic 30-second cloud sync background task.
+ */
+export function startPeriodicCloudSync(): void {
+  if (syncIntervalTimer !== null) return
+
+  // Every 30 seconds sync all pending / recent sales to cloud
+  syncIntervalTimer = setInterval(() => {
+    if (isCloudEnabled() && navigator.onLine) {
+      void syncAllPendingSales()
+    }
+  }, 30_000)
+}
+
+/**
+ * Stop periodic cloud sync.
+ */
+export function stopPeriodicCloudSync(): void {
+  if (syncIntervalTimer !== null) {
+    clearInterval(syncIntervalTimer)
+    syncIntervalTimer = null
+  }
+}
 
 /**
  * Test the Supabase connection by querying the completed_sales table.

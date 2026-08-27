@@ -45,11 +45,25 @@ export function usePersistence() {
 
         // Initialize Supabase cloud sync if configured
         try {
-          const { initSupabaseFromSettings } = await import('../services/cloud/supabaseSync')
+          const { initSupabaseFromSettings, syncAllPendingSales } = await import('../services/cloud/supabaseSync')
           await initSupabaseFromSettings()
+          // Catch up on any unsynced sales right away
+          void syncAllPendingSales()
         } catch {
           // Cloud sync stays off
         }
+
+        // Add online event listener to retry cloud sync immediately when internet comes back
+        const handleOnline = () => {
+          import('../services/cloud/supabaseSync')
+            .then(({ syncAllPendingSales, isCloudEnabled }) => {
+              if (isCloudEnabled()) {
+                void syncAllPendingSales()
+              }
+            })
+            .catch(() => {})
+        }
+        window.addEventListener('online', handleOnline)
 
         if (printer.deviceId) {
           printerService.startSilentAutoConnect()

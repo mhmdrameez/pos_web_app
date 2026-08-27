@@ -52,10 +52,26 @@ export interface SupabaseSettings {
   enabled: boolean
 }
 
+export interface GoogleDriveSettings {
+  clientId?: string
+  enabled: boolean
+  autoUploadDaily?: boolean
+  accessToken?: string
+  tokenExpiry?: number
+  userEmail?: string
+}
+
+export interface BackupSettings {
+  autoBackup10pmEnabled: boolean
+  lastBackupDate?: string
+}
+
 export interface AppSettings {
   businessName: string
   emailSettings?: EmailSettings
   supabaseSettings?: SupabaseSettings
+  googleDriveSettings?: GoogleDriveSettings
+  backupSettings?: BackupSettings
 }
 
 export interface PairedPrinter {

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { startDailyDigestScheduler } from './services/email/dailyDigestScheduler'
+import { startDailyBackupScheduler } from './services/backup/autoBackupScheduler'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -10,8 +11,9 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 )
 
-// Start the 10PM daily digest scheduler in the background
+// Start background schedulers
 startDailyDigestScheduler()
+startDailyBackupScheduler()
 
 // Prevent pull-to-refresh on tablet/mobile touch devices
 let touchStartY = 0
