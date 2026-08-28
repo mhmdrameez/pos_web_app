@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Lightbulb } from 'lucide-react'
 import { useCartStore } from '../../stores/useCartStore'
 import { useSuggestionUiStore } from '../../stores/useSuggestionUiStore'
+import { usePrinterStore } from '../../stores/usePrinterStore'
 import { parseAmountAndQuantity } from '../../utils/money'
 import { productSuggestionEngine } from '../../services/suggestion/engine'
 import { formatDisplayName, normalizeProductKey } from '../../services/suggestion/productName'
@@ -22,6 +23,7 @@ function manualSuggestion(name: string): RankedSuggestion {
 
 export function ProductSuggestionBar() {
   const currentAmount = useCartStore((s) => s.currentAmount)
+  const showSuggestions = usePrinterStore((s) => s.showSuggestions)
   const best = useSuggestionUiStore((s) => s.best)
   const alternatives = useSuggestionUiStore((s) => s.alternatives)
   const dismissed = useSuggestionUiStore((s) => s.dismissed)
@@ -48,7 +50,7 @@ export function ProductSuggestionBar() {
     setChangeOpen(false)
   }
 
-  const show = Boolean(entry && best && !dismissed)
+  const show = Boolean(showSuggestions !== false && entry && best && !dismissed)
 
   return (
     <>

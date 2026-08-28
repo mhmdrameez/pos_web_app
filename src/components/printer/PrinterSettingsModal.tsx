@@ -26,6 +26,7 @@ export function PrinterSettingsModal() {
   const businessName = useAppStore((s) => s.businessName)
 
   const paperWidth = usePrinterStore((s) => s.paperWidth)
+  const showSuggestions = usePrinterStore((s) => s.showSuggestions)
   const deviceId = usePrinterStore((s) => s.deviceId)
   const deviceName = usePrinterStore((s) => s.deviceName)
   const pairedPrinters = usePrinterStore((s) => s.pairedPrinters) ?? []
@@ -33,6 +34,7 @@ export function PrinterSettingsModal() {
   const lastError = usePrinterStore((s) => s.lastError)
   const isSupported = usePrinterStore((s) => s.isSupported)
   const setPaperWidth = usePrinterStore((s) => s.setPaperWidth)
+  const setShowSuggestions = usePrinterStore((s) => s.setShowSuggestions)
   const setStatus = usePrinterStore((s) => s.setStatus)
   const rememberPrinter = usePrinterStore((s) => s.rememberPrinter)
   const setPairedPrinters = usePrinterStore((s) => s.setPairedPrinters)
@@ -191,6 +193,31 @@ export function PrinterSettingsModal() {
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="flex items-center justify-between bg-gray-50 rounded-xl p-4">
+          <div>
+            <p className="text-sm font-medium text-gray-700">Product Suggestions</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Show product name suggestions on the keypad page
+            </p>
+          </div>
+          <button
+            id="suggestion-toggle"
+            type="button"
+            role="switch"
+            aria-checked={showSuggestions}
+            onClick={() => setShowSuggestions(!showSuggestions)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+              showSuggestions ? 'bg-primary' : 'bg-gray-300'
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                showSuggestions ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
         </div>
 
         <div>

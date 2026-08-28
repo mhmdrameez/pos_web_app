@@ -85,6 +85,7 @@ export interface PrinterSettings {
   deviceId?: string
   deviceName?: string
   pairedPrinters?: PairedPrinter[]
+  showSuggestions?: boolean
 }
 
 export type SidebarView =
