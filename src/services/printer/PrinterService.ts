@@ -149,20 +149,26 @@ export class PrinterService {
   async printCoupon(coupon: Coupon, businessName: string, paperWidth: 58 | 80): Promise<void> {
     const encoder = new EscPosEncoder(paperWidth)
 
-    encoder.align('center').bold(true).size(1, 2).text(businessName)
+    encoder.align('center').bold(true).size(2, 2).text(businessName)
       .newline().bold(false).size()
 
-    encoder.newline(2)
+    encoder.newline(1)
     encoder.separator()
-    encoder.align('center').bold(true).text('STORE CREDIT').newline().bold(false)
-    encoder.text(`Code: ${coupon.code}`).newline()
+    encoder.align('center').bold(true).size(1, 2).text('STORE CREDIT').newline().size().bold(false)
+    encoder.newline()
+    
+    encoder.align('center').size(2, 2).bold(true).text(coupon.code).newline().size().bold(false)
+    encoder.newline()
+    
     const amountStr = `Rs. ${(coupon.amountPaise / 100).toFixed(2)}`
-    encoder.text(`Amount: ${amountStr}`).newline()
+    encoder.align('center').size(1, 2).text(`Amount: ${amountStr}`).newline().size()
+    
     if (coupon.customerName) {
-      encoder.text(`For: ${coupon.customerName}`).newline()
+      encoder.newline().align('center').text(`For: ${coupon.customerName}`).newline()
     }
-    encoder.text('Valid for next purchase!').newline()
-    encoder.text(new Date(coupon.createdAt).toLocaleString('en-IN')).newline()
+    
+    encoder.newline().align('center').text('Valid for next purchase!').newline()
+    encoder.align('center').text(new Date(coupon.createdAt).toLocaleString('en-IN')).newline()
     encoder.separator()
 
     encoder.newline(1)
@@ -203,13 +209,12 @@ export class PrinterService {
   const encoder = new EscPosEncoder(paperWidth)
 
   // Header
-  encoder.align('center').bold(true).size(1, 2).text(data.businessName)
+  encoder.align('center').bold(true).size(2, 2).text(data.businessName)
     .newline().bold(false).size()
 
-  if (data.invoiceNumber !== 'PREVIEW') {
-    encoder.align('center').text(data.invoiceNumber).newline()
-  }
-  encoder.text(data.date).newline(2)
+  // Removed invoice number printing
+  
+  encoder.align('center').text(data.date).newline(2)
 
   // Customer info
   if (data.customer) {
@@ -240,7 +245,9 @@ export class PrinterService {
     encoder.tableRow(`Coupon (${data.appliedCouponCode})`, 'APPLIED')
   }
   
-  encoder.bold(true).tableRow('TOTAL', data.grandTotal).bold(false)
+  encoder.separator()
+  encoder.align('center').size(1, 2).bold(true).text(`TOTAL: ${data.grandTotal}`).newline().size().bold(false)
+  encoder.separator()
   encoder.feedLines(1)
 
   // Payment details
@@ -251,10 +258,12 @@ export class PrinterService {
   if (data.issuedCouponCode) {
     encoder.newline(2)
     encoder.separator()
-    encoder.align('center').bold(true).text('STORE CREDIT ISSUED').newline().bold(false)
-    encoder.text(`Code: ${data.issuedCouponCode}`).newline()
-    encoder.text(`Amount: ${data.change || data.amountPaid}`).newline()
-    encoder.text('Valid for next purchase!').newline()
+    encoder.align('center').bold(true).size(1, 2).text('STORE CREDIT ISSUED').newline().size().bold(false)
+    encoder.newline()
+    encoder.align('center').size(2, 2).bold(true).text(data.issuedCouponCode).newline().size().bold(false)
+    encoder.newline()
+    encoder.align('center').text(`Amount: ${data.change || data.amountPaid}`).newline()
+    encoder.align('center').text('Valid for next purchase!').newline()
     encoder.separator()
   }
 
