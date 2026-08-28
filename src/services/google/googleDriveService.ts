@@ -2,7 +2,9 @@
  * Google Drive API Service
  *
  * Allows uploading JSON database backups directly to the user's Google Drive.
- * Uses Google Identity Services (GIS) token client for seamless, secure in-browser OAuth.
+ * Uses Google Identity Services (GIS) with both popup and redirect OAuth flows:
+ *   - Desktop browsers: tries popup first, falls back to redirect if blocked
+ *   - Mobile / installed PWA (standalone): always uses redirect flow
  */
 
 import { getSettings, saveSettings } from '../db/database'
@@ -17,8 +19,18 @@ declare global {
             client_id: string
             scope: string
             callback: (response: { access_token?: string; error?: string; expires_in?: number }) => void
+            error_callback?: (error: { type: string; message?: string }) => void
           }) => {
             requestAccessToken: (overrideConfig?: { prompt?: string }) => void
+          }
+          initCodeClient: (config: {
+            client_id: string
+            scope: string
+            ux_mode: 'popup' | 'redirect'
+            redirect_uri?: string
+            callback?: (response: { code?: string; error?: string }) => void
+          }) => {
+            requestCode: () => void
           }
         }
       }
@@ -28,10 +40,27 @@ declare global {
 
 const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file'
 const BACKUP_FOLDER_NAME = 'QuickSale_Backups'
+const OAUTH_STATE_KEY = 'quick-sale-pos:oauth-pending-client-id'
 
-let tokenClient: ReturnType<NonNullable<NonNullable<NonNullable<Window['google']>['accounts']>['oauth2']>['initTokenClient']> | null = null
 let currentAccessToken: string | null = null
 let tokenExpiresAt = 0
+
+/**
+ * Detect if the app is running as an installed PWA (standalone mode).
+ */
+function isStandalonePWA(): boolean {
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    (navigator as unknown as { standalone?: boolean }).standalone === true
+  )
+}
+
+/**
+ * Detect if running on a mobile device.
+ */
+function isMobileDevice(): boolean {
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+}
 
 /**
  * Dynamically load Google Identity Services client script if not already loaded.
@@ -59,7 +88,116 @@ export async function loadGsiScript(): Promise<void> {
 }
 
 /**
- * Request an access token from Google using OAuth2 Popup.
+ * Exchange an authorization code for an access token using Google's token endpoint.
+ * This is the standard OAuth2 authorization code exchange for public clients (no secret needed).
+ */
+async function exchangeCodeForToken(
+  code: string,
+  clientId: string,
+  redirectUri: string,
+): Promise<{ access_token?: string; expires_in?: number; error?: string }> {
+  try {
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code',
+      }),
+    })
+
+    const data = await response.json()
+    if (!response.ok) {
+      return { error: data.error_description || data.error || `Token exchange failed (${response.status})` }
+    }
+    return { access_token: data.access_token, expires_in: data.expires_in }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Token exchange failed' }
+  }
+}
+
+/**
+ * Called once on app startup to handle the OAuth redirect callback.
+ * If the URL contains a `?code=...` parameter, we exchange it for an access token and save it.
+ */
+export async function handleOAuthRedirectIfPresent(): Promise<void> {
+  const params = new URLSearchParams(window.location.search)
+  const code = params.get('code')
+
+  if (!code) return
+
+  // Clean the URL immediately to avoid re-processing
+  const cleanUrl = window.location.origin + window.location.pathname
+  window.history.replaceState({}, '', cleanUrl)
+
+  // Retrieve the client ID we saved before the redirect
+  const clientId = sessionStorage.getItem(OAUTH_STATE_KEY) || localStorage.getItem(OAUTH_STATE_KEY)
+  if (!clientId) {
+    // Try to get from saved settings as a fallback
+    try {
+      const settings = await getSettings()
+      const savedClientId = settings.googleDriveSettings?.clientId
+      if (!savedClientId) {
+        console.warn('[GoogleDrive] OAuth redirect received but no client ID found')
+        return
+      }
+      await processAuthCode(code, savedClientId)
+    } catch {
+      console.warn('[GoogleDrive] Failed to process OAuth redirect')
+    }
+    return
+  }
+
+  // Clean up the stored state
+  sessionStorage.removeItem(OAUTH_STATE_KEY)
+  localStorage.removeItem(OAUTH_STATE_KEY)
+
+  await processAuthCode(code, clientId)
+}
+
+/**
+ * Process an authorization code: exchange it for a token and persist.
+ */
+async function processAuthCode(code: string, clientId: string): Promise<void> {
+  const redirectUri = window.location.origin + '/'
+
+  const result = await exchangeCodeForToken(code, clientId, redirectUri)
+
+  if (result.error || !result.access_token) {
+    console.error('[GoogleDrive] Token exchange failed:', result.error)
+    return
+  }
+
+  currentAccessToken = result.access_token
+  const expiresIn = result.expires_in || 3599
+  tokenExpiresAt = Date.now() + expiresIn * 1000
+
+  // Persist to settings
+  try {
+    const settings = await getSettings()
+    await saveSettings({
+      ...settings,
+      googleDriveSettings: {
+        ...settings.googleDriveSettings,
+        clientId: clientId.trim(),
+        enabled: true,
+        accessToken: currentAccessToken,
+        tokenExpiry: tokenExpiresAt,
+      },
+    })
+  } catch {
+    // non-critical
+  }
+}
+
+/**
+ * Request an access token from Google.
+ *
+ * Strategy:
+ * - Mobile / Standalone PWA → always use redirect flow (popup can't return to PWA)
+ * - Desktop browser → try popup first; if popup is blocked or errors, fall back to redirect
  */
 export async function authenticateGoogleDrive(clientId: string): Promise<{ success: boolean; accessToken?: string; error?: string }> {
   if (!clientId || !clientId.trim()) {
@@ -68,15 +206,29 @@ export async function authenticateGoogleDrive(clientId: string): Promise<{ succe
 
   await loadGsiScript()
 
-  return new Promise((resolve) => {
-    if (!window.google?.accounts?.oauth2) {
-      resolve({ success: false, error: 'Google Identity Services could not be initialized' })
-      return
-    }
+  if (!window.google?.accounts?.oauth2) {
+    return { success: false, error: 'Google Identity Services could not be initialized' }
+  }
 
+  const useRedirect = isStandalonePWA() || isMobileDevice()
+
+  if (useRedirect) {
+    return startRedirectFlow(clientId.trim())
+  }
+
+  // Desktop: try popup flow first
+  return startPopupFlow(clientId.trim())
+}
+
+/**
+ * Popup-based token flow (desktop browsers).
+ * Falls back to redirect if popup is blocked.
+ */
+function startPopupFlow(clientId: string): Promise<{ success: boolean; accessToken?: string; error?: string }> {
+  return new Promise((resolve) => {
     try {
-      tokenClient = window.google.accounts.oauth2.initTokenClient({
-        client_id: clientId.trim(),
+      const tokenClient = window.google!.accounts!.oauth2!.initTokenClient({
+        client_id: clientId,
         scope: GOOGLE_DRIVE_SCOPE,
         callback: async (response) => {
           if (response.error || !response.access_token) {
@@ -95,7 +247,7 @@ export async function authenticateGoogleDrive(clientId: string): Promise<{ succe
               ...settings,
               googleDriveSettings: {
                 ...settings.googleDriveSettings,
-                clientId: clientId.trim(),
+                clientId,
                 enabled: true,
                 accessToken: currentAccessToken,
                 tokenExpiry: tokenExpiresAt,
@@ -107,16 +259,63 @@ export async function authenticateGoogleDrive(clientId: string): Promise<{ succe
 
           resolve({ success: true, accessToken: currentAccessToken })
         },
+        error_callback: (error) => {
+          // Popup blocked or closed — fall back to redirect
+          if (error.type === 'popup_blocked' || error.type === 'popup_closed') {
+            startRedirectFlow(clientId).then(resolve)
+            return
+          }
+          resolve({ success: false, error: error.message || `Auth error: ${error.type}` })
+        },
       })
 
       tokenClient.requestAccessToken({ prompt: 'consent' })
     } catch (err) {
-      resolve({
-        success: false,
-        error: err instanceof Error ? err.message : 'Failed to launch Google Sign-in',
-      })
+      // If popup fails for any reason, fall back to redirect
+      startRedirectFlow(clientId).then(resolve)
     }
   })
+}
+
+/**
+ * Redirect-based code flow (mobile / PWA / popup fallback).
+ * Navigates the current window to Google's consent screen.
+ * After consent, Google redirects back with ?code=... which is handled by handleOAuthRedirectIfPresent().
+ */
+function startRedirectFlow(clientId: string): Promise<{ success: boolean; error?: string }> {
+  // Save the client ID so we can retrieve it after the redirect
+  try {
+    sessionStorage.setItem(OAUTH_STATE_KEY, clientId)
+  } catch {
+    // sessionStorage may not be available in some PWA contexts
+  }
+  // Also save to localStorage as a more durable fallback
+  try {
+    localStorage.setItem(OAUTH_STATE_KEY, clientId)
+  } catch {
+    // non-critical
+  }
+
+  try {
+    const redirectUri = window.location.origin + '/'
+
+    const codeClient = window.google!.accounts!.oauth2!.initCodeClient({
+      client_id: clientId,
+      scope: GOOGLE_DRIVE_SCOPE,
+      ux_mode: 'redirect',
+      redirect_uri: redirectUri,
+    })
+
+    codeClient.requestCode()
+
+    // The page will navigate away — this promise won't resolve
+    return new Promise(() => {})
+  } catch (err) {
+    return Promise.resolve({
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to start Google sign-in redirect',
+    })
+  }
 }
 
 /**

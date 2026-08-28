@@ -4,6 +4,14 @@ import './index.css'
 import App from './App.tsx'
 import { startDailyDigestScheduler } from './services/email/dailyDigestScheduler'
 import { startDailyBackupScheduler } from './services/backup/autoBackupScheduler'
+import { handleOAuthRedirectIfPresent } from './services/google/googleDriveService'
+
+// Handle OAuth redirect callback (if returning from Google sign-in)
+// This must run before React renders so the auth code is captured immediately.
+handleOAuthRedirectIfPresent().catch(() => {
+  // Non-critical — log silently
+  console.warn('[GoogleDrive] OAuth redirect handling failed')
+})
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
