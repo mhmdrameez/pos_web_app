@@ -8,6 +8,7 @@ import { CustomerModal } from '../quick-sale/CustomerModal'
 import { CheckoutModal } from '../quick-sale/CheckoutModal'
 import { PrinterSettingsModal } from '../printer/PrinterSettingsModal'
 import { AppSettingsView } from '../settings/AppSettingsView'
+import { CouponsView } from '../coupons/CouponsView'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { ToastContainer } from '../ui/Toast'
 
@@ -25,6 +26,8 @@ export function AppLayout() {
         return <SavedOrdersView />
       case 'sales-history':
         return <SalesHistoryView />
+      case 'coupons':
+        return <CouponsView />
       case 'printer-settings':
         return <QuickSaleView />
       case 'app-settings':

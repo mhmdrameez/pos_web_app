@@ -5,6 +5,7 @@ import {
   History,
   Printer,
   Settings,
+  Ticket,
 } from 'lucide-react'
 import { useAppStore } from '../../stores/useAppStore'
 import type { SidebarView } from '../../types'
@@ -12,6 +13,7 @@ import type { SidebarView } from '../../types'
 const navItems: { id: SidebarView; label: string; icon: typeof History }[] = [
   { id: 'quick-sale', label: 'Quick Sale', icon: Calculator },
   { id: 'products', label: 'Add Products / Catalog', icon: PackagePlus },
+  { id: 'coupons', label: 'Coupons', icon: Ticket },
   { id: 'sales-history', label: 'Sales History', icon: History },
   { id: 'printer-settings', label: 'Printer Settings', icon: Printer },
   { id: 'app-settings', label: 'Application Settings', icon: Settings },

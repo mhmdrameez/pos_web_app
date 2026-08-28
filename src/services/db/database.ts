@@ -5,6 +5,7 @@ import type {
   CompletedSale,
   PrinterSettings,
   SavedOrder,
+  Coupon,
 } from '../../types'
 import type { ProductPairStat, ProductStat } from '../../types/suggestion'
 
@@ -53,6 +54,7 @@ class QuickSaleDB extends Dexie {
   productStats!: Table<ProductStat>
   productPairs!: Table<ProductPairStat>
   suggestionMeta!: Table<{ id: string; fingerprint: string; rebuiltAt: number }>
+  coupons!: Table<Coupon>
 
   constructor() {
     super('QuickSalePOS')
@@ -75,8 +77,6 @@ class QuickSaleDB extends Dexie {
       productPairs: 'id',
       suggestionMeta: 'id',
     })
-    // v3: salesCount/latestCompletedAt added to counters (no schema change needed,
-    // they are extra non-indexed fields on the existing 'id' key).
     this.version(3).stores({
       savedOrders: 'id, orderNumber, status, createdAt, updatedAt',
       completedSales: 'id, invoiceNumber, completedAt, status',
@@ -87,6 +87,18 @@ class QuickSaleDB extends Dexie {
       productStats: 'productKey, lastSoldAt',
       productPairs: 'id',
       suggestionMeta: 'id',
+    })
+    this.version(4).stores({
+      savedOrders: 'id, orderNumber, status, createdAt, updatedAt',
+      completedSales: 'id, invoiceNumber, completedAt, status',
+      settings: 'id',
+      printerSettings: 'id',
+      cart: 'id',
+      counters: 'id',
+      productStats: 'productKey, lastSoldAt',
+      productPairs: 'id',
+      suggestionMeta: 'id',
+      coupons: 'id, code, status, createdAt',
     })
   }
 }
@@ -356,4 +368,23 @@ export async function decrementSalesCounter(): Promise<void> {
   } catch {
     // Non-critical
   }
+}
+
+export async function createCoupon(coupon: Coupon): Promise<void> {
+  await db.coupons.put(coupon)
+}
+
+export async function getCouponByCode(code: string): Promise<Coupon | undefined> {
+  return db.coupons.where('code').equals(code).first()
+}
+
+export async function markCouponUsed(id: string): Promise<void> {
+  await db.coupons.update(id, {
+    status: 'used',
+    usedAt: Date.now(),
+  })
+}
+
+export async function getAllCoupons(): Promise<Coupon[]> {
+  return db.coupons.orderBy('createdAt').reverse().toArray()
 }

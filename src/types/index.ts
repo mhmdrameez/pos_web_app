@@ -38,6 +38,18 @@ export interface CompletedSale extends SavedOrder {
   changePaise?: number
   completedAt: number
   emailSentAt?: number
+  appliedCouponCode?: string
+  issuedCouponCode?: string
+}
+
+export interface Coupon {
+  id: string
+  code: string
+  amountPaise: number
+  status: 'active' | 'used' | 'expired'
+  createdAt: number
+  usedAt?: number
+  expiresAt?: number
 }
 
 export interface EmailSettings {
@@ -93,6 +105,7 @@ export type SidebarView =
   | 'saved-orders'
   | 'sales-history'
   | 'products'
+  | 'coupons'
   | 'printer-settings'
   | 'app-settings'
 
