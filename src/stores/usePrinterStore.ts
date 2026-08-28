@@ -23,12 +23,15 @@ interface PrinterState extends PrinterSettings {
 
 function upsertPrinter(list: PairedPrinter[] | undefined, deviceId: string, deviceName: string): PairedPrinter[] {
   const printers = list ?? []
-  if (printers.some((printer) => printer.id === deviceId)) {
-    return printers.map((printer) =>
+  // Remove any older entry with the same name to avoid duplicates of the same physical printer
+  const filtered = printers.filter((p) => p.name !== deviceName || p.id === deviceId)
+  
+  if (filtered.some((printer) => printer.id === deviceId)) {
+    return filtered.map((printer) =>
       printer.id === deviceId ? { id: deviceId, name: deviceName } : printer,
     )
   }
-  return [...printers, { id: deviceId, name: deviceName }]
+  return [...filtered, { id: deviceId, name: deviceName }]
 }
 
 function seedPairedPrinters(settings: PrinterSettings): PairedPrinter[] {

@@ -16,7 +16,18 @@ function mergePrinterLists(saved: PairedPrinter[], live: PairedPrinter[]): Paire
       name: printer.name && printer.name !== 'BLE Printer' ? printer.name : byId.get(printer.id)?.name ?? printer.name,
     })
   }
-  return [...byId.values()]
+  
+  // Deduplicate by name to prevent multiple entries of the same physical printer 
+  // (Chrome sometimes generates new IDs for the same device)
+  const byName = new Map<string, PairedPrinter>()
+  // Process in reverse so the most recent / live ones take precedence
+  const allPrinters = [...byId.values()].reverse()
+  for (const printer of allPrinters) {
+      if (!byName.has(printer.name)) {
+        byName.set(printer.name, printer)
+      }
+  }
+  return [...byName.values()].reverse()
 }
 
 export function PrinterSettingsModal() {
