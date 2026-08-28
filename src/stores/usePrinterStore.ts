@@ -9,7 +9,6 @@ interface PrinterState extends PrinterSettings {
   isSupported: boolean
 
   setPaperWidth: (width: 58 | 80) => void
-  setFontSize: (size: number) => void
   setShowSuggestions: (show: boolean) => void
   setStatus: (status: ConnectionStatus) => void
   setLastError: (error: string | null) => void
@@ -48,7 +47,6 @@ function seedPairedPrinters(settings: PrinterSettings): PairedPrinter[] {
 
 export const usePrinterStore = create<PrinterState>((set, get) => ({
   paperWidth: 58,
-  fontSize: 1,
   showSuggestions: true,
   deviceId: undefined,
   deviceName: undefined,
@@ -58,7 +56,6 @@ export const usePrinterStore = create<PrinterState>((set, get) => ({
   isSupported: typeof navigator !== 'undefined' && 'bluetooth' in navigator,
 
   setPaperWidth: (width) => set({ paperWidth: width }),
-  setFontSize: (size) => set({ fontSize: size }),
   setShowSuggestions: (show) => set({ showSuggestions: show }),
 
   setStatus: (status) => set({ status }),
@@ -81,7 +78,6 @@ export const usePrinterStore = create<PrinterState>((set, get) => ({
   loadSettings: (settings) =>
     set({
       paperWidth: settings.paperWidth,
-      fontSize: settings.fontSize ?? 1,
       showSuggestions: settings.showSuggestions !== false,
       deviceId: settings.deviceId,
       deviceName: settings.deviceName,
@@ -89,8 +85,8 @@ export const usePrinterStore = create<PrinterState>((set, get) => ({
     }),
 
   getSettings: () => {
-    const { paperWidth, fontSize, showSuggestions, deviceId, deviceName, pairedPrinters } = get()
-    return { paperWidth, fontSize, showSuggestions, deviceId, deviceName, pairedPrinters }
+    const { paperWidth, showSuggestions, deviceId, deviceName, pairedPrinters } = get()
+    return { paperWidth, showSuggestions, deviceId, deviceName, pairedPrinters }
   },
 
   disconnect: () =>
