@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Menu, Printer, X, ChevronRight, ChevronLeft } from 'lucide-react'
+import { Menu, Printer, X, ChevronRight, ChevronLeft, Lightbulb } from 'lucide-react'
 import { AmountDisplay } from './AmountDisplay'
 import { ProductSuggestionBar } from './ProductSuggestionBar'
 import { NumericKeypad } from './NumericKeypad'
 import { OrderPanel } from './OrderPanel'
 import { useAppStore } from '../../stores/useAppStore'
+import { usePrinterStore } from '../../stores/usePrinterStore'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import { useProductSuggestion } from '../../hooks/useProductSuggestion'
 
@@ -13,6 +14,8 @@ export function QuickSaleView() {
   const toggleCartDrawer = useAppStore((s) => s.toggleCartDrawer)
   const setCartDrawerOpen = useAppStore((s) => s.setCartDrawerOpen)
   const openPrinterSettings = useAppStore((s) => s.openPrinterSettings)
+  const showSuggestions = usePrinterStore((s) => s.showSuggestions)
+  const setShowSuggestions = usePrinterStore((s) => s.setShowSuggestions)
 
   // Order panel collapse state — visible by default, collapsible on all sizes ≥ md
   const [isOrderOpen, setIsOrderOpen] = useState(true)
@@ -28,6 +31,18 @@ export function QuickSaleView() {
         <div className="flex items-center justify-between mb-4 md:hidden">
           <h2 className="text-lg font-semibold">Quick Sale</h2>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowSuggestions(!showSuggestions)}
+              className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-colors ${
+                showSuggestions
+                  ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
+                  : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+              }`}
+              aria-label={showSuggestions ? 'Turn off suggestions' : 'Turn on suggestions'}
+            >
+              <Lightbulb className="w-5 h-5" />
+            </button>
             <button
               type="button"
               onClick={openPrinterSettings}
@@ -48,7 +63,20 @@ export function QuickSaleView() {
           </div>
         </div>
 
-        <div className="hidden md:flex justify-end mb-2">
+        <div className="hidden md:flex justify-end gap-2 mb-2">
+          <button
+            type="button"
+            onClick={() => setShowSuggestions(!showSuggestions)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium transition-colors ${
+              showSuggestions
+                ? 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                : 'border-gray-200 bg-white text-gray-400 hover:bg-gray-50'
+            }`}
+            aria-label={showSuggestions ? 'Turn off suggestions' : 'Turn on suggestions'}
+          >
+            <Lightbulb className="w-4 h-4" />
+            {showSuggestions ? 'Suggestions On' : 'Suggestions Off'}
+          </button>
           <button
             type="button"
             onClick={openPrinterSettings}
