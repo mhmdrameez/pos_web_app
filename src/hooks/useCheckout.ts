@@ -80,6 +80,7 @@ export function useCheckout() {
             amountPaise: changePaise,
             status: 'active',
             createdAt: now,
+            customerName: cart.customer?.name,
           })
           // If change is issued as coupon, they don't get cash back
           changePaise = 0

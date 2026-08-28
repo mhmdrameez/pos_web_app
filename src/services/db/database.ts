@@ -385,6 +385,12 @@ export async function markCouponUsed(id: string): Promise<void> {
   })
 }
 
+export async function cancelCoupon(id: string): Promise<void> {
+  await db.coupons.update(id, {
+    status: 'cancelled',
+  })
+}
+
 export async function getAllCoupons(): Promise<Coupon[]> {
   return db.coupons.orderBy('createdAt').reverse().toArray()
 }

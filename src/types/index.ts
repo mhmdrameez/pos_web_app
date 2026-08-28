@@ -46,10 +46,11 @@ export interface Coupon {
   id: string
   code: string
   amountPaise: number
-  status: 'active' | 'used' | 'expired'
+  status: 'active' | 'used' | 'expired' | 'cancelled'
   createdAt: number
   usedAt?: number
   expiresAt?: number
+  customerName?: string
 }
 
 export interface EmailSettings {

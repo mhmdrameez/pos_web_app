@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react'
 import { Ticket, Plus, Tag } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Modal } from '../ui/Modal'
-import { formatMoney } from '../../utils/money'
-import { generateId } from '../../utils/generateId'
-import { getAllCoupons, createCoupon } from '../../services/db/database'
+import { formatRupees } from '../../utils/money'
+import { generateId } from '../../utils/id'
+import { getAllCoupons, createCoupon, cancelCoupon } from '../../services/db/database'
 import type { Coupon } from '../../types'
 import { useAppStore } from '../../stores/useAppStore'
 
@@ -12,6 +12,7 @@ export function CouponsView() {
   const [coupons, setCoupons] = useState<Coupon[]>([])
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [amountStr, setAmountStr] = useState('')
+  const [customerName, setCustomerName] = useState('')
   const addToast = useAppStore((s) => s.addToast)
 
   async function loadCoupons() {
@@ -49,12 +50,21 @@ export function CouponsView() {
       amountPaise: Math.round(amount * 100),
       status: 'active',
       createdAt: Date.now(),
+      customerName: customerName.trim() || undefined,
     }
 
     await createCoupon(newCoupon)
     addToast('success', `Coupon created: ${code}`)
     setIsModalOpen(false)
     setAmountStr('')
+    setCustomerName('')
+    void loadCoupons()
+  }
+
+  async function handleCancelCoupon(id: string) {
+    if (!confirm('Are you sure you want to cancel this store credit?')) return
+    await cancelCoupon(id)
+    addToast('info', 'Coupon cancelled')
     void loadCoupons()
   }
 
@@ -92,6 +102,11 @@ export function CouponsView() {
                     <div className="text-xl font-bold font-mono tracking-wide text-gray-900">
                       {coupon.code}
                     </div>
+                    {coupon.customerName && (
+                      <div className="text-sm text-gray-600 mt-1">
+                        For: <span className="font-medium text-gray-800">{coupon.customerName}</span>
+                      </div>
+                    )}
                   </div>
                   <div
                     className={`px-2.5 py-1 text-xs font-semibold rounded-full ${
@@ -109,13 +124,23 @@ export function CouponsView() {
                 <div className="mt-auto">
                   <div className="text-xs text-gray-500 mb-0.5">Value</div>
                   <div className="text-2xl font-bold text-primary">
-                    {formatMoney(coupon.amountPaise)}
+                    {formatRupees(coupon.amountPaise)}
                   </div>
                 </div>
 
-                <div className="mt-4 pt-4 border-t border-gray-100 text-xs text-gray-400 flex justify-between">
-                  <span>Issued: {new Date(coupon.createdAt).toLocaleDateString()}</span>
-                  {coupon.usedAt && <span>Used: {new Date(coupon.usedAt).toLocaleDateString()}</span>}
+                <div className="mt-4 pt-4 border-t border-gray-100 text-xs text-gray-400 flex justify-between items-center">
+                  <div>
+                    <div className="mb-1">Issued: {new Date(coupon.createdAt).toLocaleDateString()}</div>
+                    {coupon.usedAt && <div>Used: {new Date(coupon.usedAt).toLocaleDateString()}</div>}
+                  </div>
+                  {coupon.status === 'active' && (
+                    <button
+                      onClick={() => handleCancelCoupon(coupon.id)}
+                      className="text-red-600 hover:text-red-800 font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -144,6 +169,18 @@ export function CouponsView() {
               className="w-full text-xl p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
               placeholder="0.00"
               autoFocus
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Customer Name <span className="text-gray-400 font-normal">(Optional)</span>
+            </label>
+            <input
+              type="text"
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              className="w-full text-base p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+              placeholder="e.g. John Doe"
             />
           </div>
           <div className="flex gap-2 pt-2">
