@@ -20,6 +20,8 @@ export interface ReceiptData {
   amountPaid?: string
   change?: string
   customer?: Customer | null
+  appliedCouponCode?: string
+  issuedCouponCode?: string
 }
 
 export function generateReceiptData(sale: CompletedSale, businessName: string): ReceiptData {
@@ -51,6 +53,8 @@ export function generateReceiptData(sale: CompletedSale, businessName: string): 
     amountPaid: sale.amountPaidPaise ? formatRupees(sale.amountPaidPaise).replace('₹', 'Rs.') : undefined,
     change: sale.changePaise ? formatRupees(sale.changePaise).replace('₹', 'Rs.') : undefined,
     customer: sale.customer,
+    appliedCouponCode: sale.appliedCouponCode,
+    issuedCouponCode: sale.issuedCouponCode,
   }
 }
 

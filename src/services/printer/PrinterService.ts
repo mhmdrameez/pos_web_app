@@ -206,6 +206,11 @@ export class PrinterService {
     encoder.tableRow('Subtotal', data.subtotal)
     encoder.tableRow('Discount', `-${data.discount}`)
   }
+  
+  if (data.appliedCouponCode) {
+    encoder.tableRow(`Coupon (${data.appliedCouponCode})`, 'APPLIED')
+  }
+  
   encoder.bold(true).tableRow('TOTAL', data.grandTotal).bold(false)
   encoder.feedLines(1)
 
@@ -214,6 +219,16 @@ export class PrinterService {
   if (data.amountPaid) encoder.newline().text(`Paid: ${data.amountPaid}`)
   if (data.change) encoder.newline().text(`Change: ${data.change}`)
   
+  if (data.issuedCouponCode) {
+    encoder.newline(2)
+    encoder.separator()
+    encoder.align('center').bold(true).text('STORE CREDIT ISSUED').newline().bold(false)
+    encoder.text(`Code: ${data.issuedCouponCode}`).newline()
+    encoder.text(`Amount: ${data.change || data.amountPaid}`).newline()
+    encoder.text('Valid for next purchase!').newline()
+    encoder.separator()
+  }
+
   // Footer
   encoder.newline(1)
   encoder.align('center').text('Thank you!')

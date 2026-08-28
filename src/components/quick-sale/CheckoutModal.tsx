@@ -5,6 +5,7 @@ import { useCheckout } from '../../hooks/useCheckout'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { formatRupees, amountStringToPaise, calculateChange, paiseToRupees } from '../../utils/money'
+import { getCouponByCode } from '../../services/db/database'
 import type { PaymentMethod } from '../../types'
 
 export function CheckoutModal() {
@@ -20,6 +21,10 @@ export function CheckoutModal() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
   const [cashAmount, setCashAmount] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
+  const [couponInput, setCouponInput] = useState('')
+  const [appliedCouponCode, setAppliedCouponCode] = useState<string | undefined>()
+  const [appliedCouponDiscount, setAppliedCouponDiscount] = useState(0)
+  const [issueCouponForChange, setIssueCouponForChange] = useState(false)
 
   useEffect(() => {
     if (!isOpen) return
@@ -33,16 +38,40 @@ export function CheckoutModal() {
     } else {
       setPaymentMethod('cash')
       setCashAmount('')
+      setAppliedCouponCode(undefined)
+      setAppliedCouponDiscount(0)
+      setCouponInput('')
+      setIssueCouponForChange(false)
     }
   }, [isOpen, editingSale])
 
+  const effectiveGrandTotal = Math.max(0, grandTotal - appliedCouponDiscount)
   const cashPaise = amountStringToPaise(cashAmount)
-  const changePaise = calculateChange(cashPaise, grandTotal)
-  const insufficientCash = paymentMethod === 'cash' && cashPaise > 0 && cashPaise < grandTotal
+  const changePaise = calculateChange(cashPaise, effectiveGrandTotal)
+  const insufficientCash = paymentMethod === 'cash' && cashPaise > 0 && cashPaise < effectiveGrandTotal
+
+  async function handleApplyCoupon() {
+    const code = couponInput.trim().toUpperCase()
+    if (!code) return
+    const coupon = await getCouponByCode(code)
+    if (coupon && coupon.status === 'active') {
+      setAppliedCouponCode(code)
+      setAppliedCouponDiscount(coupon.amountPaise)
+      setCouponInput('')
+      addToast('success', 'Coupon applied')
+    } else {
+      addToast('error', 'Invalid or already used coupon code')
+    }
+  }
+
+  function handleRemoveCoupon() {
+    setAppliedCouponCode(undefined)
+    setAppliedCouponDiscount(0)
+  }
 
   async function handleComplete(shouldPrint: boolean) {
     if (paymentMethod === 'cash') {
-      if (cashPaise < grandTotal) {
+      if (cashPaise < effectiveGrandTotal) {
         addToast('error', 'Insufficient cash amount')
         return
       }
@@ -54,9 +83,15 @@ export function CheckoutModal() {
         paymentMethod,
         paymentMethod === 'cash' ? cashPaise : undefined,
         shouldPrint,
+        undefined,
+        issueCouponForChange,
+        appliedCouponCode
       )
       setCashAmount('')
       setPaymentMethod('cash')
+      setAppliedCouponCode(undefined)
+      setAppliedCouponDiscount(0)
+      setIssueCouponForChange(false)
     } finally {
       setIsProcessing(false)
     }
@@ -79,13 +114,41 @@ export function CheckoutModal() {
         <div className="bg-gray-50 rounded-xl p-4">
           <div className="text-center mb-3">
             <p className="text-sm text-gray-500">Amount Due</p>
-            <p className="text-3xl font-bold text-gray-900 tabular-nums">{formatRupees(grandTotal)}</p>
+            {appliedCouponDiscount > 0 ? (
+              <div className="flex flex-col items-center gap-1 mt-1">
+                <span className="text-xl text-gray-400 line-through tabular-nums">{formatRupees(grandTotal)}</span>
+                <span className="text-green-600 text-sm font-medium">Coupon applied: -{formatRupees(appliedCouponDiscount)}</span>
+                <p className="text-3xl font-bold text-gray-900 tabular-nums">{formatRupees(effectiveGrandTotal)}</p>
+              </div>
+            ) : (
+              <p className="text-3xl font-bold text-gray-900 tabular-nums">{formatRupees(grandTotal)}</p>
+            )}
           </div>
           <div className="flex justify-between text-sm border-t border-gray-200 pt-3">
             <span className="text-gray-500">{itemCount} line item{itemCount !== 1 ? 's' : ''}</span>
             <span className="font-semibold text-gray-700">Total Qty: <span className="tabular-nums">{totalQty}</span></span>
           </div>
         </div>
+
+        {!appliedCouponCode ? (
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={couponInput}
+              onChange={(e) => setCouponInput(e.target.value)}
+              placeholder="Coupon Code"
+              className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 uppercase"
+            />
+            <Button variant="secondary" onClick={handleApplyCoupon} disabled={!couponInput.trim()}>
+              Apply
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between bg-green-50 px-3 py-2 rounded-lg border border-green-200">
+            <span className="text-sm font-medium text-green-800">Coupon {appliedCouponCode}</span>
+            <button onClick={handleRemoveCoupon} className="text-sm text-green-700 hover:text-green-900 underline">Remove</button>
+          </div>
+        )}
 
         <div>
           <p className="text-sm font-medium text-gray-700 mb-2">Payment Method</p>
@@ -124,10 +187,23 @@ export function CheckoutModal() {
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
               placeholder="0.00"
             />
-            {cashPaise >= grandTotal && (
-              <p className="text-green-600 text-sm mt-2 font-medium">
-                Change: {formatRupees(changePaise)}
-              </p>
+            {cashPaise >= effectiveGrandTotal && (
+              <div className="mt-2 space-y-2">
+                <p className="text-green-600 text-sm font-medium">
+                  Change: {formatRupees(changePaise)}
+                </p>
+                {changePaise > 0 && (
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={issueCouponForChange}
+                      onChange={(e) => setIssueCouponForChange(e.target.checked)}
+                      className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary"
+                    />
+                    <span className="text-sm text-gray-700">Issue Change as Store Credit (Coupon)</span>
+                  </label>
+                )}
+              </div>
             )}
             {insufficientCash && (
               <p className="text-red-500 text-sm mt-2">Insufficient amount</p>

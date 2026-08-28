@@ -24,6 +24,8 @@ export function useCheckout() {
     amountPaidPaise?: number,
     shouldPrint = false,
     savedOrderId?: string,
+    issueCouponForChange = false,
+    appliedCouponCode?: string,
   ): Promise<boolean> {
     const cart = useCartStore.getState()
     const items = cart.items
@@ -36,13 +38,52 @@ export function useCheckout() {
     try {
       const now = Date.now()
       const subtotalPaise = cart.getSubtotalPaise()
-      const discountPaise = cart.discountPaise
-      const grandTotalPaise = cart.getGrandTotalPaise()
+      
+      // Calculate effective grand total after applying coupon
+      let discountPaise = cart.discountPaise
+      let grandTotalPaise = cart.getGrandTotalPaise()
+      let finalGrandTotalPaise = grandTotalPaise
+      
+      let couponDiscount = 0
+      const db = await import('../services/db/database')
+      if (appliedCouponCode) {
+        const coupon = await db.getCouponByCode(appliedCouponCode)
+        if (coupon && coupon.status === 'active') {
+          couponDiscount = coupon.amountPaise
+          finalGrandTotalPaise = Math.max(0, grandTotalPaise - couponDiscount)
+        } else {
+           addToast('error', 'Invalid or already used coupon')
+           return false
+        }
+      }
+
       const editingSale = cart.editingSale
 
       let sale: CompletedSale
-
       let previousSale: CompletedSale | undefined
+      
+      const isCash = paymentMethod === 'cash'
+      let changePaise = isCash && amountPaidPaise ? Math.max(0, amountPaidPaise - finalGrandTotalPaise) : undefined
+      
+      let issuedCouponCode: string | undefined
+      if (issueCouponForChange && changePaise && changePaise > 0) {
+          const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+          let code = ''
+          for (let i = 0; i < 8; i++) {
+            if (i === 4) code += '-'
+            code += chars.charAt(Math.floor(Math.random() * chars.length))
+          }
+          issuedCouponCode = code
+          await db.createCoupon({
+            id: generateId(),
+            code,
+            amountPaise: changePaise,
+            status: 'active',
+            createdAt: now,
+          })
+          // If change is issued as coupon, they don't get cash back
+          changePaise = 0
+      }
 
       if (editingSale) {
         const existing = await getCompletedSale(editingSale.id)
@@ -60,13 +101,12 @@ export function useCheckout() {
           items: [...items],
           subtotalPaise,
           discountPaise,
-          grandTotalPaise,
+          grandTotalPaise: finalGrandTotalPaise,
           paymentMethod,
-          amountPaidPaise: paymentMethod === 'cash' ? amountPaidPaise : grandTotalPaise,
-          changePaise:
-            paymentMethod === 'cash' && amountPaidPaise
-              ? Math.max(0, amountPaidPaise - grandTotalPaise)
-              : undefined,
+          amountPaidPaise: isCash ? amountPaidPaise : finalGrandTotalPaise,
+          changePaise,
+          appliedCouponCode,
+          issuedCouponCode,
         }
       } else {
         const invoiceNumber = await getNextInvoiceNumber()
@@ -81,18 +121,24 @@ export function useCheckout() {
           items: [...items],
           subtotalPaise,
           discountPaise,
-          grandTotalPaise,
+          grandTotalPaise: finalGrandTotalPaise,
           status: 'completed',
           paymentMethod,
-          amountPaidPaise: paymentMethod === 'cash' ? amountPaidPaise : grandTotalPaise,
-          changePaise:
-            paymentMethod === 'cash' && amountPaidPaise
-              ? Math.max(0, amountPaidPaise - grandTotalPaise)
-              : undefined,
+          amountPaidPaise: isCash ? amountPaidPaise : finalGrandTotalPaise,
+          changePaise,
+          appliedCouponCode,
+          issuedCouponCode,
         }
       }
 
       await saveCompletedSale(sale)
+      
+      if (appliedCouponCode) {
+         const coupon = await db.getCouponByCode(appliedCouponCode)
+         if (coupon) {
+            await db.markCouponUsed(coupon.id)
+         }
+      }
 
       const { forgetCompletedSale, ingestCompletedSale, persistSuggestionSnapshot } = await import(
         '../services/suggestion'
@@ -126,10 +172,13 @@ export function useCheckout() {
 
       clearCart()
       closeCheckoutModal()
-      addToast(
-        'success',
-        editingSale ? `Bill updated — ${sale.invoiceNumber}` : `Sale completed — ${sale.invoiceNumber}`,
-      )
+      
+      const successMsg = editingSale ? `Bill updated — ${sale.invoiceNumber}` : `Sale completed — ${sale.invoiceNumber}`
+      if (issuedCouponCode) {
+          addToast('success', `${successMsg} (Issued Coupon: ${issuedCouponCode})`)
+      } else {
+          addToast('success', successMsg)
+      }
       return true
     } catch {
       addToast('error', 'Failed to complete sale')
