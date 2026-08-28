@@ -2,9 +2,8 @@
  * Google Drive API Service
  *
  * Allows uploading JSON database backups directly to the user's Google Drive.
- * Uses Google Identity Services (GIS) with both popup and redirect OAuth flows:
- *   - Desktop browsers: tries popup first, falls back to redirect if blocked
- *   - Mobile / installed PWA (standalone): always uses redirect flow
+ * Uses Google Identity Services (GIS) for desktop popup flow, and a manual
+ * OAuth2 redirect (implicit) flow for mobile/PWA where popups can't work.
  */
 
 import { getSettings, saveSettings } from '../db/database'
@@ -22,15 +21,6 @@ declare global {
             error_callback?: (error: { type: string; message?: string }) => void
           }) => {
             requestAccessToken: (overrideConfig?: { prompt?: string }) => void
-          }
-          initCodeClient: (config: {
-            client_id: string
-            scope: string
-            ux_mode: 'popup' | 'redirect'
-            redirect_uri?: string
-            callback?: (response: { code?: string; error?: string }) => void
-          }) => {
-            requestCode: () => void
           }
         }
       }
@@ -88,90 +78,44 @@ export async function loadGsiScript(): Promise<void> {
 }
 
 /**
- * Exchange an authorization code for an access token using Google's token endpoint.
- * This is the standard OAuth2 authorization code exchange for public clients (no secret needed).
- */
-async function exchangeCodeForToken(
-  code: string,
-  clientId: string,
-  redirectUri: string,
-): Promise<{ access_token?: string; expires_in?: number; error?: string }> {
-  try {
-    const response = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        code,
-        client_id: clientId,
-        redirect_uri: redirectUri,
-        grant_type: 'authorization_code',
-      }),
-    })
-
-    const data = await response.json()
-    if (!response.ok) {
-      return { error: data.error_description || data.error || `Token exchange failed (${response.status})` }
-    }
-    return { access_token: data.access_token, expires_in: data.expires_in }
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Token exchange failed' }
-  }
-}
-
-/**
  * Called once on app startup to handle the OAuth redirect callback.
- * If the URL contains a `?code=...` parameter, we exchange it for an access token and save it.
+ *
+ * The implicit OAuth flow returns the access token in the URL hash fragment:
+ *   https://posquickbill.vercel.app/#access_token=ya29...&token_type=Bearer&expires_in=3600
+ *
+ * We parse it, save the token, and clean the URL.
  */
 export async function handleOAuthRedirectIfPresent(): Promise<void> {
-  const params = new URLSearchParams(window.location.search)
-  const code = params.get('code')
+  const hash = window.location.hash
+  if (!hash || !hash.includes('access_token=')) return
 
-  if (!code) return
+  // Parse the hash fragment (remove leading #)
+  const params = new URLSearchParams(hash.substring(1))
+  const accessToken = params.get('access_token')
+  const expiresInStr = params.get('expires_in')
+  const error = params.get('error')
 
-  // Clean the URL immediately to avoid re-processing
+  // Clean the URL immediately to avoid re-processing and exposing the token
   const cleanUrl = window.location.origin + window.location.pathname
   window.history.replaceState({}, '', cleanUrl)
 
-  // Retrieve the client ID we saved before the redirect
-  const clientId = sessionStorage.getItem(OAUTH_STATE_KEY) || localStorage.getItem(OAUTH_STATE_KEY)
-  if (!clientId) {
-    // Try to get from saved settings as a fallback
-    try {
-      const settings = await getSettings()
-      const savedClientId = settings.googleDriveSettings?.clientId
-      if (!savedClientId) {
-        console.warn('[GoogleDrive] OAuth redirect received but no client ID found')
-        return
-      }
-      await processAuthCode(code, savedClientId)
-    } catch {
-      console.warn('[GoogleDrive] Failed to process OAuth redirect')
-    }
+  if (error || !accessToken) {
+    console.warn('[GoogleDrive] OAuth redirect error:', error || 'no access token')
     return
   }
+
+  // Retrieve the client ID we saved before the redirect
+  const clientId =
+    sessionStorage.getItem(OAUTH_STATE_KEY) ||
+    localStorage.getItem(OAUTH_STATE_KEY)
 
   // Clean up the stored state
-  sessionStorage.removeItem(OAUTH_STATE_KEY)
-  localStorage.removeItem(OAUTH_STATE_KEY)
+  try { sessionStorage.removeItem(OAUTH_STATE_KEY) } catch { /* */ }
+  try { localStorage.removeItem(OAUTH_STATE_KEY) } catch { /* */ }
 
-  await processAuthCode(code, clientId)
-}
+  const expiresIn = expiresInStr ? parseInt(expiresInStr, 10) : 3599
 
-/**
- * Process an authorization code: exchange it for a token and persist.
- */
-async function processAuthCode(code: string, clientId: string): Promise<void> {
-  const redirectUri = window.location.origin + '/'
-
-  const result = await exchangeCodeForToken(code, clientId, redirectUri)
-
-  if (result.error || !result.access_token) {
-    console.error('[GoogleDrive] Token exchange failed:', result.error)
-    return
-  }
-
-  currentAccessToken = result.access_token
-  const expiresIn = result.expires_in || 3599
+  currentAccessToken = accessToken
   tokenExpiresAt = Date.now() + expiresIn * 1000
 
   // Persist to settings
@@ -181,7 +125,7 @@ async function processAuthCode(code: string, clientId: string): Promise<void> {
       ...settings,
       googleDriveSettings: {
         ...settings.googleDriveSettings,
-        clientId: clientId.trim(),
+        ...(clientId ? { clientId: clientId.trim() } : {}),
         enabled: true,
         accessToken: currentAccessToken,
         tokenExpiry: tokenExpiresAt,
@@ -196,18 +140,12 @@ async function processAuthCode(code: string, clientId: string): Promise<void> {
  * Request an access token from Google.
  *
  * Strategy:
- * - Mobile / Standalone PWA → always use redirect flow (popup can't return to PWA)
- * - Desktop browser → try popup first; if popup is blocked or errors, fall back to redirect
+ * - Mobile / Standalone PWA → always use manual redirect flow (GIS popup can't return to PWA)
+ * - Desktop browser → try GIS popup; if blocked or errors, fall back to redirect
  */
 export async function authenticateGoogleDrive(clientId: string): Promise<{ success: boolean; accessToken?: string; error?: string }> {
   if (!clientId || !clientId.trim()) {
     return { success: false, error: 'Google Client ID is required' }
-  }
-
-  await loadGsiScript()
-
-  if (!window.google?.accounts?.oauth2) {
-    return { success: false, error: 'Google Identity Services could not be initialized' }
   }
 
   const useRedirect = isStandalonePWA() || isMobileDevice()
@@ -216,12 +154,19 @@ export async function authenticateGoogleDrive(clientId: string): Promise<{ succe
     return startRedirectFlow(clientId.trim())
   }
 
-  // Desktop: try popup flow first
+  // Desktop: load GIS and try popup flow
+  await loadGsiScript()
+
+  if (!window.google?.accounts?.oauth2) {
+    // GIS couldn't load — fall back to redirect
+    return startRedirectFlow(clientId.trim())
+  }
+
   return startPopupFlow(clientId.trim())
 }
 
 /**
- * Popup-based token flow (desktop browsers).
+ * GIS Popup-based token flow (desktop browsers).
  * Falls back to redirect if popup is blocked.
  */
 function startPopupFlow(clientId: string): Promise<{ success: boolean; accessToken?: string; error?: string }> {
@@ -270,7 +215,7 @@ function startPopupFlow(clientId: string): Promise<{ success: boolean; accessTok
       })
 
       tokenClient.requestAccessToken({ prompt: 'consent' })
-    } catch (err) {
+    } catch {
       // If popup fails for any reason, fall back to redirect
       startRedirectFlow(clientId).then(resolve)
     }
@@ -278,35 +223,34 @@ function startPopupFlow(clientId: string): Promise<{ success: boolean; accessTok
 }
 
 /**
- * Redirect-based code flow (mobile / PWA / popup fallback).
- * Navigates the current window to Google's consent screen.
- * After consent, Google redirects back with ?code=... which is handled by handleOAuthRedirectIfPresent().
+ * Manual OAuth2 implicit redirect flow (mobile / PWA / popup fallback).
+ *
+ * We do NOT use GIS initCodeClient here because it has a known bug in standalone
+ * PWA contexts where it mangles the client_id (prepends http:// and appends /).
+ *
+ * Instead, we construct the standard Google OAuth2 URL manually.
+ * Using response_type=token (implicit flow) so we get the access token directly
+ * in the URL hash fragment — no code exchange or client secret needed.
  */
 function startRedirectFlow(clientId: string): Promise<{ success: boolean; error?: string }> {
   // Save the client ID so we can retrieve it after the redirect
-  try {
-    sessionStorage.setItem(OAUTH_STATE_KEY, clientId)
-  } catch {
-    // sessionStorage may not be available in some PWA contexts
-  }
-  // Also save to localStorage as a more durable fallback
-  try {
-    localStorage.setItem(OAUTH_STATE_KEY, clientId)
-  } catch {
-    // non-critical
-  }
+  try { sessionStorage.setItem(OAUTH_STATE_KEY, clientId) } catch { /* */ }
+  try { localStorage.setItem(OAUTH_STATE_KEY, clientId) } catch { /* */ }
 
   try {
     const redirectUri = window.location.origin + '/'
 
-    const codeClient = window.google!.accounts!.oauth2!.initCodeClient({
-      client_id: clientId,
-      scope: GOOGLE_DRIVE_SCOPE,
-      ux_mode: 'redirect',
-      redirect_uri: redirectUri,
-    })
+    // Build the standard Google OAuth2 authorization URL
+    const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth')
+    authUrl.searchParams.set('client_id', clientId)
+    authUrl.searchParams.set('redirect_uri', redirectUri)
+    authUrl.searchParams.set('response_type', 'token')
+    authUrl.searchParams.set('scope', GOOGLE_DRIVE_SCOPE)
+    authUrl.searchParams.set('include_granted_scopes', 'true')
+    authUrl.searchParams.set('prompt', 'consent')
 
-    codeClient.requestCode()
+    // Navigate the current window to Google's consent screen
+    window.location.href = authUrl.toString()
 
     // The page will navigate away — this promise won't resolve
     return new Promise(() => {})
