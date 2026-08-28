@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Menu, Printer, X, ChevronRight, ChevronLeft, ChevronUp, ChevronDown, Lightbulb, Receipt, ShoppingCart } from 'lucide-react'
+import { Printer, X, ChevronRight, ChevronLeft, ChevronUp, ChevronDown, Lightbulb, Receipt, ShoppingCart } from 'lucide-react'
 import { AmountDisplay } from './AmountDisplay'
 import { ProductSuggestionBar } from './ProductSuggestionBar'
 import { NumericKeypad } from './NumericKeypad'
@@ -16,7 +16,6 @@ import { formatRupees } from '../../utils/money'
 
 export function QuickSaleView() {
   const isCartDrawerOpen = useAppStore((s) => s.isCartDrawerOpen)
-  const toggleCartDrawer = useAppStore((s) => s.toggleCartDrawer)
   const setCartDrawerOpen = useAppStore((s) => s.setCartDrawerOpen)
   const openPrinterSettings = useAppStore((s) => s.openPrinterSettings)
   const openCheckoutModal = useAppStore((s) => s.openCheckoutModal)
