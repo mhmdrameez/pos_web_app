@@ -139,7 +139,8 @@ export class PrinterService {
 
   async printReceipt(sale: CompletedSale, businessName: string, paperWidth: 58 | 80): Promise<void> {
   const receiptData = generateReceiptData(sale, businessName)
-  const encoded = this.encodeReceipt(receiptData, paperWidth)
+  const fontSize = usePrinterStore.getState().fontSize || 1
+  const encoded = this.encodeReceipt(receiptData, paperWidth, fontSize)
   await this.adapter.print(encoded)
   
   // Allow the printer to finish processing before the next job can start
@@ -147,21 +148,25 @@ export class PrinterService {
 }
 
   async printCoupon(coupon: Coupon, businessName: string, paperWidth: 58 | 80): Promise<void> {
-    const encoder = new EscPosEncoder(paperWidth)
+    const fontSize = usePrinterStore.getState().fontSize || 1
+    const encoder = new EscPosEncoder(paperWidth, fontSize)
+    
+    const doubleSize = Math.min(8, fontSize + 1)
+    const tripleSize = Math.min(8, fontSize + 2)
 
-    encoder.align('center').bold(true).size(2, 2).text(businessName)
+    encoder.align('center').bold(true).size(tripleSize, tripleSize).text(businessName)
       .newline().bold(false).size()
 
     encoder.newline(1)
     encoder.separator()
-    encoder.align('center').bold(true).size(1, 2).text('STORE CREDIT').newline().size().bold(false)
+    encoder.align('center').bold(true).size(doubleSize, doubleSize).text('STORE CREDIT').newline().size().bold(false)
     encoder.newline()
     
-    encoder.align('center').size(2, 2).bold(true).text(coupon.code).newline().size().bold(false)
+    encoder.align('center').size(tripleSize, tripleSize).bold(true).text(coupon.code).newline().size().bold(false)
     encoder.newline()
     
     const amountStr = `Rs. ${(coupon.amountPaise / 100).toFixed(2)}`
-    encoder.align('center').size(1, 2).text(`Amount: ${amountStr}`).newline().size()
+    encoder.align('center').size(doubleSize, doubleSize).text(`Amount: ${amountStr}`).newline().size()
     
     if (coupon.customerName) {
       encoder.newline().align('center').text(`For: ${coupon.customerName}`).newline()
@@ -182,7 +187,8 @@ export class PrinterService {
   }
 
   async printTestPage(businessName: string, paperWidth: 58 | 80): Promise<void> {
-    const encoder = new EscPosEncoder(paperWidth)
+    const fontSize = usePrinterStore.getState().fontSize || 1
+    const encoder = new EscPosEncoder(paperWidth, fontSize)
     const data = encoder
       .align('center')
       .bold(true)
@@ -205,11 +211,14 @@ export class PrinterService {
     await this.adapter.print(data)
   }
 
-  encodeReceipt(data: ReceiptData, paperWidth: 58 | 80): Uint8Array {
-  const encoder = new EscPosEncoder(paperWidth)
+  encodeReceipt(data: ReceiptData, paperWidth: 58 | 80, fontSize: number = 1): Uint8Array {
+  const encoder = new EscPosEncoder(paperWidth, fontSize)
+  
+  const doubleSize = Math.min(8, fontSize + 1)
+  const tripleSize = Math.min(8, fontSize + 2)
 
   // Header
-  encoder.align('center').bold(true).size(2, 2).text(data.businessName)
+  encoder.align('center').bold(true).size(tripleSize, tripleSize).text(data.businessName)
     .newline().bold(false).size()
 
   // Removed invoice number printing
@@ -246,7 +255,7 @@ export class PrinterService {
   }
   
   encoder.separator()
-  encoder.align('center').size(1, 2).bold(true).text(`TOTAL: ${data.grandTotal}`).newline().size().bold(false)
+  encoder.align('center').size(doubleSize, doubleSize).bold(true).text(`TOTAL: ${data.grandTotal}`).newline().size().bold(false)
   encoder.separator()
   encoder.feedLines(1)
 
@@ -258,9 +267,9 @@ export class PrinterService {
   if (data.issuedCouponCode) {
     encoder.newline(2)
     encoder.separator()
-    encoder.align('center').bold(true).size(1, 2).text('STORE CREDIT ISSUED').newline().size().bold(false)
+    encoder.align('center').bold(true).size(doubleSize, doubleSize).text('STORE CREDIT ISSUED').newline().size().bold(false)
     encoder.newline()
-    encoder.align('center').size(2, 2).bold(true).text(data.issuedCouponCode).newline().size().bold(false)
+    encoder.align('center').size(tripleSize, tripleSize).bold(true).text(data.issuedCouponCode).newline().size().bold(false)
     encoder.newline()
     encoder.align('center').text(`Amount: ${data.change || data.amountPaid}`).newline()
     encoder.align('center').text('Valid for next purchase!').newline()

@@ -5,15 +5,19 @@ const LF = 0x0a
 export class EscPosEncoder {
   private buffer: number[] = []
   private maxChars: number
+  private baseFontSize: number
 
-  constructor(paperWidth: 58 | 80 = 58) {
-    this.maxChars = paperWidth === 80 ? 48 : 32
+  constructor(paperWidth: 58 | 80 = 58, fontSize: number = 1) {
+    this.baseFontSize = Math.max(1, Math.min(8, fontSize))
+    const baseMaxChars = paperWidth === 80 ? 48 : 32
+    this.maxChars = Math.max(1, Math.floor(baseMaxChars / this.baseFontSize))
     this.init()
   }
 
   private init(): this {
     this.buffer.push(ESC, 0x40)
     this.font('a')
+    this.size(this.baseFontSize, this.baseFontSize)
     return this
   }
 
@@ -48,8 +52,10 @@ export class EscPosEncoder {
     return this
   }
 
-  size(width: 1 | 2 = 1, height: 1 | 2 = 1): this {
-    const value = ((width - 1) << 4) | (height - 1)
+  size(width?: number, height?: number): this {
+    const w = Math.max(1, Math.min(8, width ?? this.baseFontSize))
+    const h = Math.max(1, Math.min(8, height ?? this.baseFontSize))
+    const value = ((w - 1) << 4) | (h - 1)
     this.buffer.push(GS, 0x21, value)
     return this
   }

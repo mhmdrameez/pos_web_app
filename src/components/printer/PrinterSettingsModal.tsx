@@ -37,6 +37,7 @@ export function PrinterSettingsModal() {
   const businessName = useAppStore((s) => s.businessName)
 
   const paperWidth = usePrinterStore((s) => s.paperWidth)
+  const fontSize = usePrinterStore((s) => s.fontSize) || 1
   const showSuggestions = usePrinterStore((s) => s.showSuggestions)
   const deviceId = usePrinterStore((s) => s.deviceId)
   const deviceName = usePrinterStore((s) => s.deviceName)
@@ -45,6 +46,7 @@ export function PrinterSettingsModal() {
   const lastError = usePrinterStore((s) => s.lastError)
   const isSupported = usePrinterStore((s) => s.isSupported)
   const setPaperWidth = usePrinterStore((s) => s.setPaperWidth)
+  const setFontSize = usePrinterStore((s) => s.setFontSize)
   const setShowSuggestions = usePrinterStore((s) => s.setShowSuggestions)
   const setStatus = usePrinterStore((s) => s.setStatus)
   const rememberPrinter = usePrinterStore((s) => s.rememberPrinter)
@@ -204,6 +206,25 @@ export function PrinterSettingsModal() {
               </button>
             ))}
           </div>
+        </div>
+
+        <div>
+          <div className="flex justify-between items-center mb-2">
+            <p className="text-sm font-medium text-gray-700">Receipt Font Size</p>
+            <span className="text-sm font-bold text-primary">{fontSize}x</span>
+          </div>
+          <input
+            type="range"
+            min="1"
+            max="8"
+            step="1"
+            value={fontSize}
+            onChange={(e) => setFontSize(parseInt(e.target.value, 10))}
+            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary"
+          />
+          <p className="text-xs text-gray-500 mt-2">
+            Scales all printed text. Higher values use more paper space. Max is 8.
+          </p>
         </div>
 
         <div className="flex items-center justify-between bg-gray-50 rounded-xl p-4">
