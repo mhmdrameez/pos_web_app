@@ -1,4 +1,4 @@
-import type { CompletedSale } from '../../types'
+import type { CompletedSale, Coupon } from '../../types'
 import { usePrinterStore } from '../../stores/usePrinterStore'
 import { generateReceiptData, type ReceiptData } from '../receipt/receiptGenerator'
 import { EscPosEncoder } from './EscPosEncoder'
@@ -145,6 +145,35 @@ export class PrinterService {
   // Allow the printer to finish processing before the next job can start
   await new Promise(resolve => setTimeout(resolve, 500))
 }
+
+  async printCoupon(coupon: Coupon, businessName: string, paperWidth: 58 | 80): Promise<void> {
+    const encoder = new EscPosEncoder(paperWidth)
+
+    encoder.align('center').bold(true).size(1, 2).text(businessName)
+      .newline().bold(false).size()
+
+    encoder.newline(2)
+    encoder.separator()
+    encoder.align('center').bold(true).text('STORE CREDIT').newline().bold(false)
+    encoder.text(`Code: ${coupon.code}`).newline()
+    const amountStr = `Rs. ${(coupon.amountPaise / 100).toFixed(2)}`
+    encoder.text(`Amount: ${amountStr}`).newline()
+    if (coupon.customerName) {
+      encoder.text(`For: ${coupon.customerName}`).newline()
+    }
+    encoder.text('Valid for next purchase!').newline()
+    encoder.text(new Date(coupon.createdAt).toLocaleString('en-IN')).newline()
+    encoder.separator()
+
+    encoder.newline(1)
+    encoder.align('center').text('Thank you!')
+
+    encoder.feedLines(1.2)
+    encoder.cut()
+
+    await this.adapter.print(encoder.encode())
+    await new Promise(resolve => setTimeout(resolve, 500))
+  }
 
   async printTestPage(businessName: string, paperWidth: 58 | 80): Promise<void> {
     const encoder = new EscPosEncoder(paperWidth)

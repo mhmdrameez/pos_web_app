@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Ticket, Plus, Tag } from 'lucide-react'
+import { Ticket, Plus, Tag, Printer } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Modal } from '../ui/Modal'
 import { formatRupees } from '../../utils/money'
@@ -7,6 +7,8 @@ import { generateId } from '../../utils/id'
 import { getAllCoupons, createCoupon, cancelCoupon } from '../../services/db/database'
 import type { Coupon } from '../../types'
 import { useAppStore } from '../../stores/useAppStore'
+import { printerService } from '../../services/printer/PrinterService'
+import { usePrinterStore } from '../../stores/usePrinterStore'
 
 export function CouponsView() {
   const [coupons, setCoupons] = useState<Coupon[]>([])
@@ -66,6 +68,21 @@ export function CouponsView() {
     await cancelCoupon(id)
     addToast('info', 'Coupon cancelled')
     void loadCoupons()
+  }
+
+  async function handlePrintCoupon(coupon: Coupon) {
+    if (!printerService.isConnected()) {
+      addToast('error', 'Connect a printer in Printer Settings to print')
+      return
+    }
+    const businessName = useAppStore.getState().businessName || 'Quick Sale POS'
+    const paperWidth = usePrinterStore.getState().paperWidth
+    try {
+      await printerService.printCoupon(coupon, businessName, paperWidth)
+      addToast('success', 'Coupon printed')
+    } catch (error) {
+      addToast('error', 'Failed to print coupon')
+    }
   }
 
   return (
@@ -133,14 +150,23 @@ export function CouponsView() {
                     <div className="mb-1">Issued: {new Date(coupon.createdAt).toLocaleDateString()}</div>
                     {coupon.usedAt && <div>Used: {new Date(coupon.usedAt).toLocaleDateString()}</div>}
                   </div>
-                  {coupon.status === 'active' && (
+                  <div className="flex gap-2">
                     <button
-                      onClick={() => handleCancelCoupon(coupon.id)}
-                      className="text-red-600 hover:text-red-800 font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                      onClick={() => handlePrintCoupon(coupon)}
+                      className="text-gray-600 hover:text-primary font-medium p-1.5 rounded hover:bg-gray-100 transition-colors"
+                      title="Print Coupon"
                     >
-                      Cancel
+                      <Printer className="w-4 h-4" />
                     </button>
-                  )}
+                    {coupon.status === 'active' && (
+                      <button
+                        onClick={() => handleCancelCoupon(coupon.id)}
+                        className="text-red-600 hover:text-red-800 font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
