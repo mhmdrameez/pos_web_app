@@ -63,15 +63,7 @@ export interface SupabaseSettings {
   projectUrl: string
   anonKey: string
   enabled: boolean
-}
-
-export interface GoogleDriveSettings {
-  clientId?: string
-  enabled: boolean
-  autoUploadDaily?: boolean
-  accessToken?: string
-  tokenExpiry?: number
-  userEmail?: string
+  backupBucketName?: string
 }
 
 export interface BackupSettings {
@@ -84,7 +76,6 @@ export interface AppSettings {
   businessName: string
   emailSettings?: EmailSettings
   supabaseSettings?: SupabaseSettings
-  googleDriveSettings?: GoogleDriveSettings
   backupSettings?: BackupSettings
 }
 

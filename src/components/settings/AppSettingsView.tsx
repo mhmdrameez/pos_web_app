@@ -24,12 +24,8 @@ import {
   syncAllPendingSales,
   subscribeCloudSyncStatus,
   getCloudSyncState,
+  uploadBackupToSupabaseStorage,
 } from '../../services/cloud/supabaseSync'
-import {
-  authenticateGoogleDrive,
-  disconnectGoogleDrive,
-  uploadCurrentBackupToGoogleDrive,
-} from '../../services/google/googleDriveService'
 import type { EmailSettings } from '../../types'
 
 interface FormState {
@@ -65,13 +61,8 @@ export function AppSettingsView() {
   const [cloudTestError, setCloudTestError] = useState('')
   const [isManualSyncing, setIsManualSyncing] = useState(false)
   const [syncStatus, setSyncStatus] = useState(getCloudSyncState())
-
-  // Google Drive & Backup Scheduler state
-  const [googleClientId, setGoogleClientId] = useState('')
-  const [googleDriveConnected, setGoogleDriveConnected] = useState(false)
-  const [connectingDrive, setConnectingDrive] = useState(false)
-  const [uploadingDrive, setUploadingDrive] = useState(false)
-  const [autoUploadDriveDaily, setAutoUploadDriveDaily] = useState(true)
+  const [backupBucketName, setBackupBucketName] = useState('')
+  const [uploadingBackup, setUploadingBackup] = useState(false)
 
   useEffect(() => {
     const unsub = subscribeCloudSyncStatus((status) => {
@@ -93,11 +84,7 @@ export function AppSettingsView() {
         setSupabaseUrl(s.supabaseSettings.projectUrl)
         setSupabaseKey(s.supabaseSettings.anonKey)
         setCloudEnabled(s.supabaseSettings.enabled)
-      }
-      if (s.googleDriveSettings) {
-        setGoogleClientId(s.googleDriveSettings.clientId || '')
-        setGoogleDriveConnected(Boolean(s.googleDriveSettings.enabled && s.googleDriveSettings.accessToken))
-        setAutoUploadDriveDaily(s.googleDriveSettings.autoUploadDaily !== false)
+        setBackupBucketName(s.supabaseSettings.backupBucketName || '')
       }
     })
   }, [])
@@ -117,21 +104,18 @@ export function AppSettingsView() {
         toEmail: form.toEmail.trim(),
       }
       const supabaseSettings = supabaseUrl.trim() && supabaseKey.trim()
-        ? { projectUrl: supabaseUrl.trim(), anonKey: supabaseKey.trim(), enabled: cloudEnabled }
+        ? {
+            projectUrl: supabaseUrl.trim(),
+            anonKey: supabaseKey.trim(),
+            enabled: cloudEnabled,
+            backupBucketName: backupBucketName.trim() || undefined,
+          }
         : undefined
-
-      const googleDriveSettings = {
-        ...(current.googleDriveSettings || {}),
-        clientId: googleClientId.trim(),
-        enabled: googleDriveConnected || Boolean(googleClientId.trim()),
-        autoUploadDaily: autoUploadDriveDaily,
-      }
 
       await saveSettings({
         ...current,
         emailSettings: form.resendApiKey.trim() ? emailSettings : undefined,
         supabaseSettings,
-        googleDriveSettings,
       })
 
       // Re-initialize Supabase client with updated settings
@@ -230,47 +214,23 @@ export function AppSettingsView() {
     }
   }
 
-  async function handleConnectGoogleDrive() {
-    if (!googleClientId.trim()) {
-      addToast('info', 'Please enter your Google OAuth Client ID first')
-      return
-    }
-    setConnectingDrive(true)
-    try {
-      const res = await authenticateGoogleDrive(googleClientId.trim())
-      if (res.success) {
-        setGoogleDriveConnected(true)
-        addToast('success', 'Connected to Google Drive!')
-      } else {
-        addToast('error', res.error || 'Failed to connect to Google Drive')
-      }
-    } catch (err) {
-      addToast('error', err instanceof Error ? err.message : 'Google sign-in failed')
-    } finally {
-      setConnectingDrive(false)
-    }
-  }
-
-  async function handleDisconnectGoogleDrive() {
-    await disconnectGoogleDrive()
-    setGoogleDriveConnected(false)
-    addToast('info', 'Disconnected from Google Drive')
-  }
-
-  async function handleUploadToGoogleDrive() {
-    setUploadingDrive(true)
+  async function handleUploadToSupabaseStorage() {
+    setUploadingBackup(true)
     try {
       const settings = await getSettings()
-      const result = await uploadCurrentBackupToGoogleDrive(settings.businessName)
+      const result = await uploadBackupToSupabaseStorage(
+        settings.businessName,
+        backupBucketName.trim() || undefined,
+      )
       if (result.success) {
-        addToast('success', `Backup uploaded to Google Drive (${result.filename})`)
+        addToast('success', `Backup uploaded to Supabase Storage (${result.filename})`)
       } else {
-        addToast('error', result.error || 'Failed to upload to Google Drive')
+        addToast('error', result.error || 'Failed to upload backup')
       }
     } catch (err) {
       addToast('error', err instanceof Error ? err.message : 'Upload failed')
     } finally {
-      setUploadingDrive(false)
+      setUploadingBackup(false)
     }
   }
 
@@ -405,7 +365,7 @@ export function AppSettingsView() {
 
           <div className="space-y-4 bg-gray-50 rounded-xl p-4">
             <p className="text-xs text-gray-500">
-              Download complete local backups, restore previous data, or save backups to Google Drive.
+              Download complete local backups, restore previous data, or upload backups to Supabase Storage.
             </p>
 
             {/* Action buttons */}
@@ -415,7 +375,7 @@ export function AppSettingsView() {
                 type="button"
                 variant="secondary"
                 onClick={handleBackup}
-                disabled={backingUp || restoring || uploadingDrive}
+                disabled={backingUp || restoring || uploadingBackup}
                 className="flex items-center gap-2"
               >
                 {backingUp ? (
@@ -427,19 +387,19 @@ export function AppSettingsView() {
               </Button>
 
               <Button
-                id="gdrive-upload-btn"
+                id="supabase-upload-btn"
                 type="button"
                 variant="secondary"
-                onClick={handleUploadToGoogleDrive}
-                disabled={backingUp || restoring || uploadingDrive}
+                onClick={handleUploadToSupabaseStorage}
+                disabled={backingUp || restoring || uploadingBackup || !hasCloudConfig}
                 className="flex items-center gap-2 text-emerald-700 border-emerald-300 hover:bg-emerald-50"
               >
-                {uploadingDrive ? (
+                {uploadingBackup ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <Cloud className="w-4 h-4 text-emerald-600" />
                 )}
-                {uploadingDrive ? 'Uploading to Drive…' : 'Upload to Google Drive'}
+                {uploadingBackup ? 'Uploading…' : 'Upload to Supabase Storage'}
               </Button>
 
               <Button
@@ -447,7 +407,7 @@ export function AppSettingsView() {
                 type="button"
                 variant="secondary"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={backingUp || restoring || uploadingDrive}
+                disabled={backingUp || restoring || uploadingBackup}
                 className="flex items-center gap-2"
               >
                 {restoring ? (
@@ -466,49 +426,6 @@ export function AppSettingsView() {
                 className="hidden"
                 aria-label="Select backup file"
               />
-            </div>
-
-            {/* Google Drive Configuration Sub-section */}
-            <div className="pt-2 border-t border-gray-200/80 space-y-2">
-              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide">
-                Google Drive Integration
-              </label>
-              <div>
-                <label className="block text-xs text-gray-600 mb-1">Google OAuth Client ID</label>
-                <div className="flex gap-2">
-                  <input
-                    id="google-client-id"
-                    type="text"
-                    value={googleClientId}
-                    onChange={(e) => setGoogleClientId(e.target.value)}
-                    placeholder="xxxx-yyyy.apps.googleusercontent.com"
-                    className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 font-mono"
-                  />
-                  {googleDriveConnected ? (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={handleDisconnectGoogleDrive}
-                      className="text-xs text-red-600"
-                    >
-                      Disconnect
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={handleConnectGoogleDrive}
-                      disabled={connectingDrive || !googleClientId.trim()}
-                      className="text-xs text-emerald-700"
-                    >
-                      {connectingDrive ? 'Connecting…' : 'Connect'}
-                    </Button>
-                  )}
-                </div>
-                <p className="text-[11px] text-gray-400 mt-1">
-                  Backups will be saved to the <code>QuickSale_Backups</code> folder in your Drive.
-                </p>
-              </div>
             </div>
 
             <div className="bg-amber-50 rounded-lg px-3 py-2 text-xs text-amber-700">
@@ -605,6 +522,30 @@ export function AppSettingsView() {
                   className="text-indigo-500 hover:underline"
                 >
                   Supabase project settings → API
+                </a>
+              </p>
+            </div>
+
+            {/* Backup Bucket Name */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Backup Bucket Name</label>
+              <input
+                id="backup-bucket-name"
+                type="text"
+                value={backupBucketName}
+                onChange={(e) => setBackupBucketName(e.target.value)}
+                placeholder="backups"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 font-mono"
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                The Supabase Storage bucket where backups will be uploaded. Create it in your{' '}
+                <a
+                  href="https://supabase.com/dashboard/project/_/storage/buckets"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-indigo-500 hover:underline"
+                >
+                  Supabase Storage dashboard
                 </a>
               </p>
             </div>

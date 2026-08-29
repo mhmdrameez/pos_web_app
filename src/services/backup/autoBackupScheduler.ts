@@ -3,14 +3,14 @@
  *
  * Automatically executes a database backup every day at 22:00 (10 PM) local time.
  * - Downloads the JSON backup file locally to the user's computer.
- * - If Google Drive is enabled and auto-upload is turned on, also uploads the backup to Google Drive.
+ * - If Supabase Storage is configured with a backup bucket, also uploads the backup there.
  *
  * Uses localStorage to prevent duplicate automatic triggers if the tab is reloaded after 10 PM.
  */
 
 import { getSettings, saveSettings } from '../db/database'
 import { exportBackup } from '../db/backupRestore'
-import { uploadCurrentBackupToGoogleDrive } from '../google/googleDriveService'
+import { uploadBackupToSupabaseStorage, isCloudEnabled } from '../cloud/supabaseSync'
 
 const LAST_BACKUP_SENT_KEY = 'quick-sale-pos:backup-last-sent'
 let backupSchedulerTimer: ReturnType<typeof setTimeout> | null = null
@@ -95,12 +95,12 @@ async function runScheduledBackup(): Promise<void> {
 
     const businessName = settings.businessName || 'Quick Sale POS'
 
-    // 1. If Google Drive is enabled with auto-upload, upload to Drive
-    if (settings.googleDriveSettings?.enabled && settings.googleDriveSettings?.autoUploadDaily !== false) {
+    // 1. If Supabase is enabled with a backup bucket, upload to Supabase Storage
+    if (isCloudEnabled() && settings.supabaseSettings?.backupBucketName) {
       try {
-        await uploadCurrentBackupToGoogleDrive(businessName)
+        await uploadBackupToSupabaseStorage(businessName)
       } catch (err) {
-        console.warn('[Auto Backup] Google drive upload warning:', err)
+        console.warn('[Auto Backup] Supabase Storage upload warning:', err)
       }
     }
 
@@ -160,7 +160,7 @@ export function startDailyBackupScheduler(): void {
 export async function triggerDailyBackupNow(): Promise<{
   success: boolean
   downloadedFilename?: string
-  driveUploaded?: boolean
+  cloudUploaded?: boolean
   error?: string
 }> {
   try {
@@ -169,15 +169,15 @@ export async function triggerDailyBackupNow(): Promise<{
     const frequency = settings.backupSettings?.autoBackupFrequency || '10pm'
 
     const filename = await exportBackup(businessName)
-    let driveUploaded = false
+    let cloudUploaded = false
 
-    if (settings.googleDriveSettings?.enabled) {
-      const driveResult = await uploadCurrentBackupToGoogleDrive(businessName)
-      driveUploaded = driveResult.success
+    if (isCloudEnabled() && settings.supabaseSettings?.backupBucketName) {
+      const result = await uploadBackupToSupabaseStorage(businessName)
+      cloudUploaded = result.success
     }
 
     markCurrentBlockRun(frequency)
-    return { success: true, downloadedFilename: filename, driveUploaded }
+    return { success: true, downloadedFilename: filename, cloudUploaded }
   } catch (err) {
     return {
       success: false,
@@ -185,3 +185,4 @@ export async function triggerDailyBackupNow(): Promise<{
     }
   }
 }
+

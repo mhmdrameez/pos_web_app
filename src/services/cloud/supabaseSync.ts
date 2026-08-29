@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { CompletedSale } from '../../types'
 import { getSettings, getCompletedSales } from '../db/database'
+import { generateBackupData, getBackupFilename } from '../db/backupRestore'
 
 let supabase: SupabaseClient | null = null
 let cloudEnabled = false
@@ -101,6 +102,11 @@ export async function initSupabaseFromSettings(): Promise<void> {
 /** Check if cloud sync is active. */
 export function isCloudEnabled(): boolean {
   return cloudEnabled && supabase !== null
+}
+
+/** Get the current Supabase client instance (or null if not initialized). */
+export function getSupabaseClient(): SupabaseClient | null {
+  return supabase
 }
 
 /**
@@ -240,6 +246,55 @@ export function stopPeriodicCloudSync(): void {
  * Test the Supabase connection by querying the completed_sales table.
  * Returns { success: true } or { success: false, error: string }.
  */
+/**
+ * Upload current database backup to Supabase Storage.
+ * Uses the already-initialized Supabase client and the bucket name from settings.
+ */
+export async function uploadBackupToSupabaseStorage(
+  businessName: string,
+  bucketName?: string,
+): Promise<{ success: boolean; filename?: string; error?: string }> {
+  try {
+    const client = getSupabaseClient()
+    if (!client) {
+      return { success: false, error: 'Supabase is not connected. Please configure and enable Cloud Sync first.' }
+    }
+
+    // Resolve bucket name: parameter > settings > error
+    let bucket = bucketName
+    if (!bucket) {
+      const settings = await getSettings()
+      bucket = settings.supabaseSettings?.backupBucketName
+    }
+    if (!bucket || !bucket.trim()) {
+      return { success: false, error: 'Backup bucket name is not configured. Please set it in Cloud Sync settings.' }
+    }
+    bucket = bucket.trim()
+
+    const backupData = await generateBackupData()
+    const filename = getBackupFilename(businessName)
+    const jsonContent = JSON.stringify(backupData, null, 2)
+    const blob = new Blob([jsonContent], { type: 'application/json' })
+
+    // Upload to Supabase Storage (upsert to overwrite same-day backups)
+    const { error } = await client.storage
+      .from(bucket)
+      .upload(filename, blob, {
+        contentType: 'application/json',
+        upsert: true,
+      })
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, filename }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Failed to upload backup to Supabase Storage'
+    return { success: false, error: msg }
+  }
+}
+
 export async function testSupabaseConnection(
   projectUrl: string,
   anonKey: string,
