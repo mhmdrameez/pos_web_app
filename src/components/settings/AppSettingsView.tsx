@@ -12,10 +12,12 @@ import {
   HardDrive,
   Cloud,
   RefreshCw,
+  Database,
 } from 'lucide-react'
 import { useAppStore } from '../../stores/useAppStore'
 import { Button } from '../ui/Button'
 import { getSettings, saveSettings } from '../../services/db/database'
+import { sqlExport } from '../../services/db/sqliteClient'
 import { sendTestEmail } from '../../services/email/emailService'
 import { exportBackup, importBackup } from '../../services/db/backupRestore'
 import {
@@ -49,6 +51,7 @@ export function AppSettingsView() {
   const [testError, setTestError] = useState('')
   const [backingUp, setBackingUp] = useState(false)
   const [restoring, setRestoring] = useState(false)
+  const [downloadingSqlite, setDownloadingSqlite] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Supabase state
@@ -234,6 +237,27 @@ export function AppSettingsView() {
     }
   }
 
+  async function handleDownloadSqlite() {
+    setDownloadingSqlite(true)
+    try {
+      const bytes = await sqlExport()
+      const blob = new Blob([bytes], { type: 'application/x-sqlite3' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')
+      a.href = url
+      a.download = `QuickSalePOS-${ts}.sqlite3`
+      a.click()
+      URL.revokeObjectURL(url)
+      addToast('success', 'SQLite database file downloaded')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      addToast('error', `Failed to export SQLite file: ${msg}`)
+    } finally {
+      setDownloadingSqlite(false)
+    }
+  }
+
   async function handleRestore(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     if (!file) return
@@ -407,7 +431,7 @@ export function AppSettingsView() {
                 type="button"
                 variant="secondary"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={backingUp || restoring || uploadingBackup}
+                disabled={backingUp || restoring || uploadingBackup || downloadingSqlite}
                 className="flex items-center gap-2"
               >
                 {restoring ? (
@@ -416,6 +440,22 @@ export function AppSettingsView() {
                   <Upload className="w-4 h-4" />
                 )}
                 {restoring ? 'Restoring…' : 'Restore Backup'}
+              </Button>
+
+              <Button
+                id="download-sqlite-btn"
+                type="button"
+                variant="secondary"
+                onClick={handleDownloadSqlite}
+                disabled={backingUp || restoring || uploadingBackup || downloadingSqlite}
+                className="flex items-center gap-2 text-violet-700 border-violet-300 hover:bg-violet-50"
+              >
+                {downloadingSqlite ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Database className="w-4 h-4 text-violet-600" />
+                )}
+                {downloadingSqlite ? 'Exporting…' : 'Download SQLite DB'}
               </Button>
 
               <input

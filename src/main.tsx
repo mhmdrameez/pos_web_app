@@ -14,6 +14,10 @@ initSQLiteClient()
   .then(() => initializeDatabase())
   .then(() => runDexieMigrationIfNeeded())
   .then(() => {
+    // Start background schedulers only after the DB is ready
+    startDailyDigestScheduler()
+    startDailyBackupScheduler()
+
     createRoot(document.getElementById('root')!).render(
       <StrictMode>
         <App />
@@ -29,10 +33,6 @@ initSQLiteClient()
       </StrictMode>,
     )
   })
-
-// Start background schedulers
-startDailyDigestScheduler()
-startDailyBackupScheduler()
 
 // Prevent pull-to-refresh on tablet/mobile touch devices
 let touchStartY = 0

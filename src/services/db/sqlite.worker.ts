@@ -19,11 +19,12 @@ import sqlite3InitModule from '@sqlite.org/sqlite-wasm'
 
 type SqlValue = string | number | null | undefined
 
-interface RunMsg   { id: number; type: 'run';         sql: string; params?: SqlValue[] }
-interface QueryMsg { id: number; type: 'query';       sql: string; params?: SqlValue[] }
-interface TxMsg    { id: number; type: 'transaction'; ops: { sql: string; params?: SqlValue[] }[] }
+interface RunMsg    { id: number; type: 'run';         sql: string; params?: SqlValue[] }
+interface QueryMsg  { id: number; type: 'query';       sql: string; params?: SqlValue[] }
+interface TxMsg     { id: number; type: 'transaction'; ops: { sql: string; params?: SqlValue[] }[] }
+interface ExportMsg { id: number; type: 'export' }
 
-type WorkerMsg = RunMsg | QueryMsg | TxMsg
+type WorkerMsg = RunMsg | QueryMsg | TxMsg | ExportMsg
 
 // ── DDL ─────────────────────────────────────────────────────────────────────
 
@@ -156,15 +157,23 @@ async function init() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sqlite3: any = await (sqlite3InitModule as any)({ print: console.log, printErr: console.error })
 
-  // Prefer opfs-sahpool (synchronous, durable); fall back to memory for contexts
-  // that don't support OPFS (e.g. non-HTTPS, test environment with in-memory flag).
-  const hasOpfs = sqlite3.capi.sqlite3_vfs_find('opfs-sahpool')
+  // Prefer the 'opfs' VFS (Origin Private File System) for durable, persistent
+  // storage. sqlite3.oo1.OpfsDb uses this VFS internally — NOT 'opfs-sahpool'
+  // (which is a separate pool-based VFS that must be explicitly installed via
+  // installOpfsSAHPoolVfs()). The 'opfs' VFS is registered automatically by
+  // sqlite-wasm when the Worker context is cross-origin isolated
+  // (crossOriginIsolated === true), which requires the page to be served with
+  // Cross-Origin-Opener-Policy: same-origin and Cross-Origin-Embedder-Policy: require-corp.
+  const hasOpfs = sqlite3.capi.sqlite3_vfs_find('opfs')
 
   if (hasOpfs) {
     db = new sqlite3.oo1.OpfsDb('/QuickSalePOS.sqlite3', 'cw')
   } else {
     db = new sqlite3.oo1.DB(':memory:', 'cw')
-    console.warn('[SQLite] OPFS not available – using in-memory DB (data will not persist)')
+    console.warn(
+      '[SQLite] OPFS not available – using in-memory DB (data will not persist).',
+      'Ensure the page is served with COOP/COEP headers and crossOriginIsolated === true.',
+    )
   }
 
   // Run DDL
@@ -215,6 +224,17 @@ self.onmessage = (event: MessageEvent<WorkerMsg>) => {
           throw err
         }
         self.postMessage({ id: msg.id, ok: true })
+        break
+      }
+
+      case 'export': {
+        // Checkpoint the WAL into the main database file first so the export
+        // contains all committed data, then serialize the entire DB to bytes.
+        try { db.exec('PRAGMA wal_checkpoint(TRUNCATE)') } catch { /* non-fatal */ }
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+        const bytes: Uint8Array = db.export() as Uint8Array
+        // Transfer the underlying ArrayBuffer (zero-copy) to the main thread.
+        self.postMessage({ id: msg.id, ok: true, bytes }, [bytes.buffer])
         break
       }
 

@@ -16,7 +16,7 @@ type SqlValue = string | number | null | undefined
 
 interface TxOp { sql: string; params?: SqlValue[] }
 
-interface WorkerOkResponse  { id: number; ok: true;  rows?: Record<string, SqlValue>[] }
+interface WorkerOkResponse  { id: number; ok: true;  rows?: Record<string, SqlValue>[]; bytes?: Uint8Array }
 interface WorkerErrResponse { id: number; ok: false; error: string }
 type WorkerResponse = WorkerOkResponse | WorkerErrResponse
 
@@ -49,7 +49,8 @@ export function initSQLiteClient(): Promise<void> {
       pending.delete(data.id)
 
       if (data.ok) {
-        pending_.resolve((data as WorkerOkResponse).rows ?? null)
+        const ok = data as WorkerOkResponse
+        pending_.resolve(ok.bytes ?? ok.rows ?? null)
       } else {
         pending_.reject(new Error((data as WorkerErrResponse).error))
       }
@@ -93,4 +94,14 @@ export function sqlQuery<T = Record<string, SqlValue>>(
 /** Run multiple statements inside a single SQLite transaction. */
 export function sqlTransaction(ops: TxOp[]): Promise<void> {
   return send({ type: 'transaction', ops })
+}
+
+/**
+ * Export the entire SQLite database as a raw binary Uint8Array.
+ * Equivalent to the `.sqlite3` file on disk — open it with DB Browser for SQLite,
+ * DBeaver, or any other SQLite-compatible tool.
+ * Works for both OPFS-backed and in-memory databases.
+ */
+export function sqlExport(): Promise<Uint8Array> {
+  return send<Uint8Array>({ type: 'export' })
 }
