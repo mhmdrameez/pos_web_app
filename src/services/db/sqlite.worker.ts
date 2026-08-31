@@ -151,6 +151,8 @@ CREATE INDEX IF NOT EXISTS idx_coupons_createdAt ON coupons(createdAt);
 // ── Bootstrap ────────────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+let sqlite3Api: any = null
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let db: any = null
 
 function sanitizeBind(params?: SqlValue[]): SqlValue[] | undefined {
@@ -170,7 +172,8 @@ function execSql(sql: string, params?: SqlValue[]) {
 
 async function init() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sqlite3: any = await (sqlite3InitModule as any)({ print: console.log, printErr: console.error })
+  sqlite3Api = await (sqlite3InitModule as any)({ print: console.log, printErr: console.error })
+  const sqlite3 = sqlite3Api
 
   // Prefer the 'opfs' VFS (Origin Private File System) for durable, persistent
   // storage. sqlite3.oo1.OpfsDb uses this VFS internally — NOT 'opfs-sahpool'
@@ -258,13 +261,17 @@ self.onmessage = (event: MessageEvent<WorkerMsg>) => {
       }
 
       case 'export': {
-        // Checkpoint the WAL into the main database file first so the export
-        // contains all committed data, then serialize the entire DB to bytes.
         try { db.exec('PRAGMA wal_checkpoint(TRUNCATE)') } catch { /* non-fatal */ }
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-        const bytes: Uint8Array = db.export() as Uint8Array
-        // Transfer the underlying ArrayBuffer (zero-copy) to the main thread.
-        self.postMessage({ id: msg.id, ok: true, bytes }, { transfer: [bytes.buffer as ArrayBuffer] })
+        // OpfsDb has no .export() — serialize via the C-style helper (same as the
+        // sqlite-wasm cookbook). Copy out of WASM memory before transferring.
+        const exported: Uint8Array = sqlite3Api?.capi?.sqlite3_js_db_export
+          ? sqlite3Api.capi.sqlite3_js_db_export(db)
+          : typeof db.export === 'function'
+            ? db.export()
+            : (() => { throw new Error('SQLite export is not available') })()
+        const bytes = new Uint8Array(exported.byteLength)
+        bytes.set(exported)
+        self.postMessage({ id: msg.id, ok: true, bytes }, { transfer: [bytes.buffer] })
         break
       }
 

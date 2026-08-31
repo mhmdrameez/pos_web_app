@@ -1,16 +1,12 @@
 /**
- * Daily Backup Scheduler
+ * Daily SQLite Backup Scheduler
  *
- * Automatically executes a database backup every day at 22:00 (10 PM) local time.
- * - Downloads the JSON backup file locally to the user's computer.
- * - If Supabase Storage is configured with a backup bucket, also uploads the backup there.
- *
- * Uses localStorage to prevent duplicate automatic triggers if the tab is reloaded after 10 PM.
+ * Automatically uploads the live SQLite database to Supabase Storage
+ * every day at 22:00 (10 PM) local time (or 10am+10pm if frequency is 12h).
  */
 
 import { getSettings, saveSettings } from '../db/database'
-import { exportBackup } from '../db/backupRestore'
-import { uploadBackupToSupabaseStorage, isCloudEnabled } from '../cloud/supabaseSync'
+import { uploadBackupToSupabaseStorage, initSupabaseFromSettings } from '../cloud/supabaseSync'
 
 const LAST_BACKUP_SENT_KEY = 'quick-sale-pos:backup-last-sent'
 let backupSchedulerTimer: ReturnType<typeof setTimeout> | null = null
@@ -79,6 +75,7 @@ function markCurrentBlockRun(frequency: '10pm' | '12h'): void {
 
 async function runScheduledBackup(): Promise<void> {
   try {
+    await initSupabaseFromSettings()
     const settings = await getSettings()
     const frequency = settings.backupSettings?.autoBackupFrequency || '10pm'
     const isAutoBackupEnabled = settings.backupSettings?.autoBackup10pmEnabled !== false
@@ -95,13 +92,18 @@ async function runScheduledBackup(): Promise<void> {
 
     const businessName = settings.businessName || 'Quick Sale POS'
 
-    // 1. If Supabase is enabled with a backup bucket, upload to Supabase Storage
-    if (isCloudEnabled() && settings.supabaseSettings?.backupBucketName) {
-      try {
-        await uploadBackupToSupabaseStorage(businessName)
-      } catch (err) {
-        console.warn('[Auto Backup] Supabase Storage upload warning:', err)
+    const sb = settings.supabaseSettings
+    if (sb?.projectUrl && sb?.anonKey && sb?.backupBucketName) {
+      const result = await uploadBackupToSupabaseStorage(businessName)
+      if (!result.success) {
+        console.warn('[Auto Backup] SQLite upload failed:', result.error)
+        return
       }
+      console.log('[Auto Backup] SQLite uploaded:', result.filename)
+    } else {
+      console.warn('[Auto Backup] Skipped — set Cloud Sync URL, key, and backup bucket to auto-upload SQLite.')
+      scheduleNextBackup(frequency)
+      return
     }
 
     markCurrentBlockRun(frequency)
@@ -141,7 +143,7 @@ function scheduleNextBackup(frequency: '10pm' | '12h'): void {
  * Also checks if we missed the current block and runs immediately if so.
  */
 export function startDailyBackupScheduler(): void {
-  getSettings().then(s => {
+  void initSupabaseFromSettings().then(() => getSettings()).then(s => {
     const frequency = s.backupSettings?.autoBackupFrequency || '10pm'
     const isAutoBackupEnabled = s.backupSettings?.autoBackup10pmEnabled !== false
     
@@ -164,20 +166,23 @@ export async function triggerDailyBackupNow(): Promise<{
   error?: string
 }> {
   try {
+    await initSupabaseFromSettings()
     const settings = await getSettings()
     const businessName = settings.businessName || 'Quick Sale POS'
     const frequency = settings.backupSettings?.autoBackupFrequency || '10pm'
+    const sb = settings.supabaseSettings
 
-    const filename = await exportBackup(businessName)
-    let cloudUploaded = false
+    if (!sb?.projectUrl || !sb?.anonKey || !sb?.backupBucketName) {
+      return { success: false, error: 'Enable Cloud Sync and set a backup bucket to upload SQLite.' }
+    }
 
-    if (isCloudEnabled() && settings.supabaseSettings?.backupBucketName) {
-      const result = await uploadBackupToSupabaseStorage(businessName)
-      cloudUploaded = result.success
+    const result = await uploadBackupToSupabaseStorage(businessName)
+    if (!result.success) {
+      return { success: false, error: result.error }
     }
 
     markCurrentBlockRun(frequency)
-    return { success: true, downloadedFilename: filename, cloudUploaded }
+    return { success: true, downloadedFilename: result.filename, cloudUploaded: true }
   } catch (err) {
     return {
       success: false,

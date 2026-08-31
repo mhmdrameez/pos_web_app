@@ -105,3 +105,9 @@ export function sqlTransaction(ops: TxOp[]): Promise<void> {
 export function sqlExport(): Promise<Uint8Array> {
   return send<Uint8Array>({ type: 'export' })
 }
+
+export function getSqliteBackupFilename(businessName: string): string {
+  const safeName = businessName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() || 'pos'
+  const dateStr = new Date().toISOString().slice(0, 10)
+  return `${safeName}_sqlite_${dateStr}.sqlite3`
+}

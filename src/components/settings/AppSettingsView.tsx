@@ -17,7 +17,7 @@ import {
 import { useAppStore } from '../../stores/useAppStore'
 import { Button } from '../ui/Button'
 import { getSettings, saveSettings } from '../../services/db/database'
-import { sqlExport } from '../../services/db/sqliteClient'
+import { sqlExport, getSqliteBackupFilename } from '../../services/db/sqliteClient'
 import { sendTestEmail } from '../../services/email/emailService'
 import { exportBackup, importBackup } from '../../services/db/backupRestore'
 import {
@@ -66,6 +66,7 @@ export function AppSettingsView() {
   const [syncStatus, setSyncStatus] = useState(getCloudSyncState())
   const [backupBucketName, setBackupBucketName] = useState('')
   const [uploadingBackup, setUploadingBackup] = useState(false)
+  const [lastBackupDate, setLastBackupDate] = useState<string | null>(null)
 
   useEffect(() => {
     const unsub = subscribeCloudSyncStatus((status) => {
@@ -88,6 +89,9 @@ export function AppSettingsView() {
         setSupabaseKey(s.supabaseSettings.anonKey)
         setCloudEnabled(s.supabaseSettings.enabled)
         setBackupBucketName(s.supabaseSettings.backupBucketName || '')
+      }
+      if (s.backupSettings?.lastBackupDate) {
+        setLastBackupDate(s.backupSettings.lastBackupDate)
       }
     })
   }, [])
@@ -226,7 +230,17 @@ export function AppSettingsView() {
         backupBucketName.trim() || undefined,
       )
       if (result.success) {
-        addToast('success', `Backup uploaded to Supabase Storage (${result.filename})`)
+        addToast('success', `SQLite file uploaded to Supabase (${result.filename})`)
+        const nowIso = new Date().toISOString()
+        setLastBackupDate(nowIso)
+        await saveSettings({
+          ...settings,
+          backupSettings: {
+            autoBackup10pmEnabled: settings.backupSettings?.autoBackup10pmEnabled !== false,
+            autoBackupFrequency: settings.backupSettings?.autoBackupFrequency || '10pm',
+            lastBackupDate: nowIso,
+          },
+        })
       } else {
         addToast('error', result.error || 'Failed to upload backup')
       }
@@ -240,13 +254,16 @@ export function AppSettingsView() {
   async function handleDownloadSqlite() {
     setDownloadingSqlite(true)
     try {
+      const settings = await getSettings()
       const bytes = await sqlExport()
-      const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/x-sqlite3' })
+      if (!bytes || bytes.byteLength === 0) {
+        throw new Error('SQLite export returned no data')
+      }
+      const blob = new Blob([new Uint8Array(bytes)], { type: 'application/x-sqlite3' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
-      const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')
       a.href = url
-      a.download = `QuickSalePOS-${ts}.sqlite3`
+      a.download = getSqliteBackupFilename(settings.businessName || 'pos')
       a.click()
       URL.revokeObjectURL(url)
       addToast('success', 'SQLite database file downloaded')
@@ -389,7 +406,7 @@ export function AppSettingsView() {
 
           <div className="space-y-4 bg-gray-50 rounded-xl p-4">
             <p className="text-xs text-gray-500">
-              Download complete local backups, restore previous data, or upload backups to Supabase Storage.
+              Download a JSON or SQLite copy, restore from JSON, or upload the live SQLite file to Supabase Storage. Automatic SQLite backups run at 10 PM when Cloud Sync and a backup bucket are enabled.
             </p>
 
             {/* Action buttons */}
@@ -415,7 +432,7 @@ export function AppSettingsView() {
                 type="button"
                 variant="secondary"
                 onClick={handleUploadToSupabaseStorage}
-                disabled={backingUp || restoring || uploadingBackup || !hasCloudConfig}
+                disabled={backingUp || restoring || uploadingBackup || !hasCloudConfig || !backupBucketName.trim()}
                 className="flex items-center gap-2 text-emerald-700 border-emerald-300 hover:bg-emerald-50"
               >
                 {uploadingBackup ? (
@@ -423,7 +440,7 @@ export function AppSettingsView() {
                 ) : (
                   <Cloud className="w-4 h-4 text-emerald-600" />
                 )}
-                {uploadingBackup ? 'Uploading…' : 'Upload to Supabase Storage'}
+                {uploadingBackup ? 'Uploading…' : 'Upload SQLite to Supabase'}
               </Button>
 
               <Button
@@ -467,6 +484,12 @@ export function AppSettingsView() {
                 aria-label="Select backup file"
               />
             </div>
+
+            {lastBackupDate && (
+              <p className="text-xs text-gray-500">
+                Last SQLite backup: {new Date(lastBackupDate).toLocaleString('en-IN')}
+              </p>
+            )}
 
             <div className="bg-amber-50 rounded-lg px-3 py-2 text-xs text-amber-700">
               <strong>Warning:</strong> Restoring will replace all existing data. Make sure to download a backup first.
@@ -578,7 +601,7 @@ export function AppSettingsView() {
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 font-mono"
               />
               <p className="text-xs text-gray-400 mt-1">
-                The Supabase Storage bucket where backups will be uploaded. Create it in your{' '}
+                The Supabase Storage bucket where the SQLite file is uploaded automatically at 10 PM and when you click Upload SQLite to Supabase. Create a public or private bucket in your{' '}
                 <a
                   href="https://supabase.com/dashboard/project/_/storage/buckets"
                   target="_blank"
