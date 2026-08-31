@@ -23,6 +23,7 @@ import type {
   Coupon,
 } from '../../types'
 import type { ProductPairStat, ProductStat } from '../../types/suggestion'
+import { toEpochMs } from '../../utils/date'
 
 // ── Defaults ─────────────────────────────────────────────────────────────────
 
@@ -74,24 +75,35 @@ type RawSale = {
   emailSentAt: number | null; appliedCouponCode: string | null; issuedCouponCode: string | null
 }
 
+function parseJsonField<T>(value: unknown, fallback: T): T {
+  if (value == null || value === '') return fallback
+  if (typeof value === 'object') return value as T
+  if (typeof value !== 'string') return fallback
+  try {
+    return JSON.parse(value) as T
+  } catch {
+    return fallback
+  }
+}
+
 function rowToCompletedSale(r: RawSale): CompletedSale {
   return {
     id: r.id,
     invoiceNumber: r.invoiceNumber,
     orderNumber: r.orderNumber,
     status: r.status as CompletedSale['status'],
-    createdAt: r.createdAt,
-    updatedAt: r.updatedAt,
-    completedAt: r.completedAt,
-    customer: r.customer ? (JSON.parse(r.customer) as CompletedSale['customer']) : undefined,
-    items: JSON.parse(r.items) as CompletedSale['items'],
+    createdAt: toEpochMs(r.createdAt),
+    updatedAt: toEpochMs(r.updatedAt),
+    completedAt: toEpochMs(r.completedAt),
+    customer: parseJsonField(r.customer, undefined as CompletedSale['customer']),
+    items: parseJsonField(r.items, [] as CompletedSale['items']),
     subtotalPaise: r.subtotalPaise,
     discountPaise: r.discountPaise,
     grandTotalPaise: r.grandTotalPaise,
     paymentMethod: r.paymentMethod as CompletedSale['paymentMethod'],
     amountPaidPaise: r.amountPaidPaise ?? undefined,
     changePaise: r.changePaise ?? undefined,
-    emailSentAt: r.emailSentAt ?? undefined,
+    emailSentAt: r.emailSentAt != null ? toEpochMs(r.emailSentAt) : undefined,
     appliedCouponCode: r.appliedCouponCode ?? undefined,
     issuedCouponCode: r.issuedCouponCode ?? undefined,
   }
@@ -111,8 +123,8 @@ function rowToSavedOrder(r: RawOrder): SavedOrder {
     status: r.status as SavedOrder['status'],
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
-    customer: r.customer ? (JSON.parse(r.customer) as SavedOrder['customer']) : undefined,
-    items: JSON.parse(r.items) as SavedOrder['items'],
+    customer: parseJsonField(r.customer, undefined as SavedOrder['customer']),
+    items: parseJsonField(r.items, [] as SavedOrder['items']),
     subtotalPaise: r.subtotalPaise,
     discountPaise: r.discountPaise,
     grandTotalPaise: r.grandTotalPaise,
@@ -315,9 +327,18 @@ export async function getCompletedSales(): Promise<CompletedSale[]> {
   )
 
   if (rows.length > 0) {
-    const sales = rows.map(rowToCompletedSale)
-    saveCompletedSalesBackup(sales)
-    return sales
+    const sales: CompletedSale[] = []
+    for (const row of rows) {
+      try {
+        sales.push(rowToCompletedSale(row))
+      } catch (err) {
+        console.warn('[DB] Skipping unreadable completed sale', row.id, err)
+      }
+    }
+    if (sales.length > 0) {
+      saveCompletedSalesBackup(sales)
+      return sales
+    }
   }
 
   // Fall back to localStorage backup (first run after migration, or empty DB)

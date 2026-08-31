@@ -146,7 +146,31 @@ import { sqlTransaction } from './sqliteClient'
 import type { CompletedSale, SavedOrder, Coupon, AppSettings, PrinterSettings, CartSnapshot } from '../../types'
 import type { ProductStat, ProductPairStat } from '../../types/suggestion'
 
-type Op = { sql: string; params?: (string | number | null | undefined)[] }
+type SqlParam = string | number | null
+type Op = { sql: string; params?: SqlParam[] }
+
+/** Bind value SQLite can accept. Nested objects/arrays from v1 JSON must become TEXT. */
+function toSqlValue(value: unknown): SqlParam {
+  if (value === undefined || value === null) return null
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+  if (typeof value === 'boolean') return value ? 1 : 0
+  if (typeof value === 'string') return value
+  return JSON.stringify(value)
+}
+
+/** TEXT columns that store JSON: keep an already-serialized string, otherwise stringify. */
+function toJsonText(value: unknown, empty: string | null = null): SqlParam {
+  if (value === undefined || value === null || value === '') return empty
+  if (typeof value === 'string') {
+    try {
+      JSON.parse(value)
+      return value
+    } catch {
+      return JSON.stringify(value)
+    }
+  }
+  return JSON.stringify(value)
+}
 
 export async function importBackup(file: File): Promise<{
   salesCount: number
@@ -156,7 +180,6 @@ export async function importBackup(file: File): Promise<{
   const content = await file.text()
   const backup = parseBackupFile(content)
 
-  const isV1 = backup.version === 1
   const t = backup.tables
 
   // Build the full list of ops — clear all tables first, then re-insert everything.
@@ -174,8 +197,18 @@ export async function importBackup(file: File): Promise<{
   ]
 
   // ── completedSales ──────────────────────────────────────────────────────
+  // v1 Dexie backups store `items`/`customer` as objects; v2 SQLite backups store TEXT.
+  // Always coerce so sqlite-wasm never tries to bind a JS array (that throws and
+  // rolls back the whole restore — suggestions would appear to "succeed" only if
+  // a later retry imported productStats, or sales would vanish while stats remain
+  // if BEGIN is not honoured).
   for (const raw of t.completedSales as (CompletedSale | Record<string, unknown>)[]) {
-    const s = raw as CompletedSale
+    const s = raw as CompletedSale & Record<string, unknown>
+    const itemsText = toJsonText(s.items, '[]')
+    if (!s.id || !s.invoiceNumber || !s.orderNumber || !s.paymentMethod || itemsText == null) {
+      console.warn('[Restore] Skipping completed sale with missing required fields', s.id)
+      continue
+    }
     ops.push({
       sql: `INSERT OR REPLACE INTO completedSales
         (id, invoiceNumber, orderNumber, status, createdAt, updatedAt, completedAt,
@@ -184,17 +217,24 @@ export async function importBackup(file: File): Promise<{
          appliedCouponCode, issuedCouponCode)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       params: [
-        s.id, s.invoiceNumber, s.orderNumber, s.status,
-        s.createdAt, s.updatedAt, s.completedAt,
-        isV1 ? (s.customer ? JSON.stringify(s.customer) : null) : ((raw as Record<string, unknown>).customer as string | null ?? null),
-        isV1 ? JSON.stringify(s.items) : ((raw as Record<string, unknown>).items as string),
-        s.subtotalPaise, s.discountPaise, s.grandTotalPaise,
-        s.paymentMethod,
-        s.amountPaidPaise   ?? null,
-        s.changePaise       ?? null,
-        s.emailSentAt       ?? null,
-        s.appliedCouponCode ?? null,
-        s.issuedCouponCode  ?? null,
+        toSqlValue(s.id),
+        toSqlValue(s.invoiceNumber),
+        toSqlValue(s.orderNumber),
+        toSqlValue(s.status ?? 'completed'),
+        toSqlValue(s.createdAt),
+        toSqlValue(s.updatedAt),
+        toSqlValue(s.completedAt ?? s.createdAt),
+        toJsonText(s.customer, null),
+        itemsText,
+        toSqlValue(s.subtotalPaise) ?? 0,
+        toSqlValue(s.discountPaise) ?? 0,
+        toSqlValue(s.grandTotalPaise) ?? 0,
+        toSqlValue(s.paymentMethod),
+        toSqlValue(s.amountPaidPaise),
+        toSqlValue(s.changePaise),
+        toSqlValue(s.emailSentAt),
+        toSqlValue(s.appliedCouponCode),
+        toSqlValue(s.issuedCouponCode),
       ],
     })
   }
@@ -208,10 +248,13 @@ export async function importBackup(file: File): Promise<{
          subtotalPaise, discountPaise, grandTotalPaise)
        VALUES (?,?,?,?,?,?,?,?,?,?)`,
       params: [
-        o.id, o.orderNumber, o.status, o.createdAt, o.updatedAt,
-        isV1 ? (o.customer ? JSON.stringify(o.customer) : null) : ((raw as Record<string, unknown>).customer as string | null ?? null),
-        isV1 ? JSON.stringify(o.items) : ((raw as Record<string, unknown>).items as string),
-        o.subtotalPaise, o.discountPaise, o.grandTotalPaise,
+        toSqlValue(o.id), toSqlValue(o.orderNumber), toSqlValue(o.status),
+        toSqlValue(o.createdAt), toSqlValue(o.updatedAt),
+        toJsonText(o.customer, null),
+        toJsonText(o.items, '[]'),
+        toSqlValue(o.subtotalPaise) ?? 0,
+        toSqlValue(o.discountPaise) ?? 0,
+        toSqlValue(o.grandTotalPaise) ?? 0,
       ],
     })
   }
@@ -219,76 +262,51 @@ export async function importBackup(file: File): Promise<{
   // ── settings ────────────────────────────────────────────────────────────
   for (const raw of t.settings as (AppSettings & { id: string } | Record<string, unknown>)[]) {
     const s = raw as AppSettings & { id: string }
-    if (isV1) {
-      ops.push({
-        sql: `INSERT OR REPLACE INTO settings
-          (id, businessName, emailSettings, supabaseSettings, backupSettings)
-         VALUES (?,?,?,?,?)`,
-        params: [
-          s.id, s.businessName,
-          s.emailSettings    ? JSON.stringify(s.emailSettings)    : null,
-          s.supabaseSettings ? JSON.stringify(s.supabaseSettings) : null,
-          s.backupSettings   ? JSON.stringify(s.backupSettings)   : null,
-        ],
-      })
-    } else {
-      const r = raw as Record<string, unknown>
-      ops.push({
-        sql: `INSERT OR REPLACE INTO settings
-          (id, businessName, emailSettings, supabaseSettings, backupSettings)
-         VALUES (?,?,?,?,?)`,
-        params: [r.id as string, r.businessName as string, r.emailSettings as string | null, r.supabaseSettings as string | null, r.backupSettings as string | null],
-      })
-    }
+    ops.push({
+      sql: `INSERT OR REPLACE INTO settings
+        (id, businessName, emailSettings, supabaseSettings, backupSettings)
+       VALUES (?,?,?,?,?)`,
+      params: [
+        toSqlValue(s.id),
+        toSqlValue(s.businessName) ?? 'INVOICE',
+        toJsonText(s.emailSettings, null),
+        toJsonText(s.supabaseSettings, null),
+        toJsonText(s.backupSettings, null),
+      ],
+    })
   }
 
   // ── printerSettings ─────────────────────────────────────────────────────
   for (const raw of t.printerSettings as (PrinterSettings & { id: string } | Record<string, unknown>)[]) {
     const p = raw as PrinterSettings & { id: string }
-    if (isV1) {
-      ops.push({
-        sql: `INSERT OR REPLACE INTO printerSettings
-          (id, paperWidth, deviceId, deviceName, pairedPrinters, showSuggestions)
-         VALUES (?,?,?,?,?,?)`,
-        params: [
-          p.id, p.paperWidth,
-          p.deviceId   ?? null, p.deviceName ?? null,
-          p.pairedPrinters ? JSON.stringify(p.pairedPrinters) : null,
-          p.showSuggestions != null ? (p.showSuggestions ? 1 : 0) : null,
-        ],
-      })
-    } else {
-      const r = raw as Record<string, unknown>
-      ops.push({
-        sql: `INSERT OR REPLACE INTO printerSettings
-          (id, paperWidth, deviceId, deviceName, pairedPrinters, showSuggestions)
-         VALUES (?,?,?,?,?,?)`,
-        params: [r.id as string, r.paperWidth as number, r.deviceId as string | null, r.deviceName as string | null, r.pairedPrinters as string | null, r.showSuggestions as number | null],
-      })
-    }
+    ops.push({
+      sql: `INSERT OR REPLACE INTO printerSettings
+        (id, paperWidth, deviceId, deviceName, pairedPrinters, showSuggestions)
+       VALUES (?,?,?,?,?,?)`,
+      params: [
+        toSqlValue(p.id),
+        toSqlValue(p.paperWidth) ?? 58,
+        toSqlValue(p.deviceId),
+        toSqlValue(p.deviceName),
+        toJsonText(p.pairedPrinters, null),
+        p.showSuggestions == null ? null : (p.showSuggestions ? 1 : 0),
+      ],
+    })
   }
 
   // ── cart ────────────────────────────────────────────────────────────────
   for (const raw of t.cart as (CartSnapshot & { id: string } | Record<string, unknown>)[]) {
     const c = raw as CartSnapshot & { id: string }
-    if (isV1) {
-      ops.push({
-        sql: `INSERT OR REPLACE INTO cart (id, items, currentAmount, customer, discountPaise) VALUES (?,?,?,?,?)`,
-        params: [
-          c.id,
-          JSON.stringify(c.items),
-          c.currentAmount,
-          c.customer ? JSON.stringify(c.customer) : null,
-          c.discountPaise,
-        ],
-      })
-    } else {
-      const r = raw as Record<string, unknown>
-      ops.push({
-        sql: `INSERT OR REPLACE INTO cart (id, items, currentAmount, customer, discountPaise) VALUES (?,?,?,?,?)`,
-        params: [r.id as string, r.items as string, r.currentAmount as string, r.customer as string | null, r.discountPaise as number],
-      })
-    }
+    ops.push({
+      sql: `INSERT OR REPLACE INTO cart (id, items, currentAmount, customer, discountPaise) VALUES (?,?,?,?,?)`,
+      params: [
+        toSqlValue(c.id),
+        toJsonText(c.items, '[]'),
+        toSqlValue(c.currentAmount) ?? '',
+        toJsonText(c.customer, null),
+        toSqlValue(c.discountPaise) ?? 0,
+      ],
+    })
   }
 
   // ── counters ────────────────────────────────────────────────────────────
@@ -298,11 +316,11 @@ export async function importBackup(file: File): Promise<{
         (id, invoiceSequence, orderSequence, salesCount, latestCompletedAt)
        VALUES (?,?,?,?,?)`,
       params: [
-        raw.id as string,
-        raw.invoiceSequence as number,
-        raw.orderSequence   as number,
-        (raw.salesCount        ?? 0) as number,
-        (raw.latestCompletedAt ?? 0) as number,
+        toSqlValue(raw.id),
+        toSqlValue(raw.invoiceSequence) ?? 0,
+        toSqlValue(raw.orderSequence) ?? 0,
+        toSqlValue(raw.salesCount) ?? 0,
+        toSqlValue(raw.latestCompletedAt) ?? 0,
       ],
     })
   }
@@ -318,11 +336,14 @@ export async function importBackup(file: File): Promise<{
          observationCount, priceBuckets)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       params: [
-        s.productKey, s.displayName, s.totalCount, s.confirmedCount, s.rejectedCount,
-        s.minPricePaise, s.maxPricePaise, s.sumPricePaise, s.sumPriceSq,
-        s.integerQtyCount, s.decimalQtyCount, s.lastSoldAt, s.recencyMass,
-        s.observationCount,
-        isV1 ? JSON.stringify(s.priceBuckets) : ((raw as Record<string, unknown>).priceBuckets as string ?? '[]'),
+        toSqlValue(s.productKey), toSqlValue(s.displayName),
+        toSqlValue(s.totalCount) ?? 0, toSqlValue(s.confirmedCount) ?? 0, toSqlValue(s.rejectedCount) ?? 0,
+        toSqlValue(s.minPricePaise) ?? 0, toSqlValue(s.maxPricePaise) ?? 0,
+        toSqlValue(s.sumPricePaise) ?? 0, toSqlValue(s.sumPriceSq) ?? 0,
+        toSqlValue(s.integerQtyCount) ?? 0, toSqlValue(s.decimalQtyCount) ?? 0,
+        toSqlValue(s.lastSoldAt) ?? 0, toSqlValue(s.recencyMass) ?? 0,
+        toSqlValue(s.observationCount) ?? 0,
+        toJsonText(s.priceBuckets, '[]'),
       ],
     })
   }
@@ -331,7 +352,7 @@ export async function importBackup(file: File): Promise<{
   for (const raw of t.productPairs as ProductPairStat[]) {
     ops.push({
       sql: 'INSERT OR REPLACE INTO productPairs (id, count, lastSeenAt) VALUES (?,?,?)',
-      params: [raw.id, raw.count, raw.lastSeenAt],
+      params: [toSqlValue(raw.id), toSqlValue(raw.count) ?? 0, toSqlValue(raw.lastSeenAt) ?? 0],
     })
   }
 
@@ -339,7 +360,7 @@ export async function importBackup(file: File): Promise<{
   for (const raw of t.suggestionMeta as { id: string; fingerprint: string; rebuiltAt: number }[]) {
     ops.push({
       sql: 'INSERT OR REPLACE INTO suggestionMeta (id, fingerprint, rebuiltAt) VALUES (?,?,?)',
-      params: [raw.id, raw.fingerprint, raw.rebuiltAt],
+      params: [toSqlValue(raw.id), toSqlValue(raw.fingerprint) ?? '', toSqlValue(raw.rebuiltAt) ?? 0],
     })
   }
 
@@ -351,10 +372,11 @@ export async function importBackup(file: File): Promise<{
         (id, code, amountPaise, status, createdAt, usedAt, expiresAt, customerName)
        VALUES (?,?,?,?,?,?,?,?)`,
       params: [
-        c.id, c.code, c.amountPaise, c.status, c.createdAt,
-        c.usedAt       ?? null,
-        c.expiresAt    ?? null,
-        c.customerName ?? null,
+        toSqlValue(c.id), toSqlValue(c.code), toSqlValue(c.amountPaise) ?? 0,
+        toSqlValue(c.status), toSqlValue(c.createdAt),
+        toSqlValue(c.usedAt),
+        toSqlValue(c.expiresAt),
+        toSqlValue(c.customerName),
       ],
     })
   }
@@ -363,8 +385,13 @@ export async function importBackup(file: File): Promise<{
   // If any statement fails the entire restore is rolled back — the DB stays intact.
   await sqlTransaction(ops)
 
+  const insertedSales = ops.filter((op) => op.sql.includes('INTO completedSales')).length
+  console.log(
+    `[Restore] Imported ${insertedSales} sales, ${t.savedOrders.length} orders, ${t.productStats.length} product stats`,
+  )
+
   return {
-    salesCount: t.completedSales.length,
+    salesCount: insertedSales,
     ordersCount: t.savedOrders.length,
     productsCount: t.productStats.length,
   }

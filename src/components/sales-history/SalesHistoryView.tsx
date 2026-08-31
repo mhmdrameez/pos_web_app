@@ -19,17 +19,13 @@ import { useAppStore } from '../../stores/useAppStore'
 import { useCartStore } from '../../stores/useCartStore'
 import type { CompletedSale } from '../../types'
 import { formatRupees } from '../../utils/money'
+import { toLocalDateStr, todayLocalDateStr } from '../../utils/date'
 import { Button } from '../ui/Button'
 import { SaleDetailModal } from './SaleDetailModal'
 
 const paymentLabels: Record<string, string> = { cash: 'Cash', upi: 'UPI', card: 'Card' }
 
 type SortDir = 'desc' | 'asc'
-
-function getTodayDateStr() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
 
 export function SalesHistoryView() {
   const [sales, setSales] = useState<CompletedSale[]>([])
@@ -39,7 +35,7 @@ export function SalesHistoryView() {
   const [sendErrorId, setSendErrorId] = useState<string | null>(null)
   const [digestSending, setDigestSending] = useState(false)
   const [emailConfigured, setEmailConfigured] = useState(false)
-  const [filterDate, setFilterDate] = useState(getTodayDateStr)
+  const [filterDate, setFilterDate] = useState(todayLocalDateStr)
   const [selectedSale, setSelectedSale] = useState<CompletedSale | null>(null)
   const addToast = useAppStore((s) => s.addToast)
   const openAppSettings = useAppStore((s) => s.openAppSettings)
@@ -51,8 +47,13 @@ export function SalesHistoryView() {
   const load = useCallback(async () => {
     try {
       const data = await getCompletedSales()
-      // getCompletedSales already returns newest-first; apply sort preference
       setSales(data)
+      const today = todayLocalDateStr()
+      const hasToday = data.some((s) => toLocalDateStr(s.completedAt) === today)
+      if (data.length > 0 && !hasToday) {
+        const latestDay = toLocalDateStr(data[0].completedAt)
+        setFilterDate(latestDay || '')
+      }
     } catch {
       addToast('error', 'Failed to load sales history')
     } finally {
@@ -70,10 +71,15 @@ export function SalesHistoryView() {
 
   const filteredSales = sales.filter((sale) => {
     if (!filterDate) return true
-    const saleDate = new Date(sale.completedAt)
-    const dateStr = `${saleDate.getFullYear()}-${String(saleDate.getMonth() + 1).padStart(2, '0')}-${String(saleDate.getDate()).padStart(2, '0')}`
-    return dateStr === filterDate
+    return toLocalDateStr(sale.completedAt) === filterDate
   })
+
+  const saleDayStrings = sales.map((s) => toLocalDateStr(s.completedAt)).filter(Boolean)
+  const sortedSaleDays = [...saleDayStrings].sort()
+  const minSaleDate = sortedSaleDays[0]
+  const maxSaleDate = sortedSaleDays[sortedSaleDays.length - 1]
+  const todayStr = todayLocalDateStr()
+  const dateInputMax = [maxSaleDate, todayStr].filter(Boolean).sort().at(-1)
 
   const sortedSales = [...filteredSales].sort((a, b) =>
     sortDir === 'desc' ? b.completedAt - a.completedAt : a.completedAt - b.completedAt,
@@ -207,6 +213,8 @@ export function SalesHistoryView() {
               id="date-filter"
               type="date"
               value={filterDate}
+              min={minSaleDate}
+              max={dateInputMax}
               onChange={(e) => setFilterDate(e.target.value)}
               className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
             />
@@ -256,7 +264,9 @@ export function SalesHistoryView() {
 
       {filteredSales.length === 0 ? (
         <p className="text-gray-400 text-center py-12">
-          {sales.length === 0 ? 'No completed sales yet.' : 'No sales match the selected date.'}
+          {sales.length === 0
+            ? 'No completed sales yet.'
+            : `No sales on this date. Clear the date filter to see all ${sales.length} sales.`}
         </p>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-gray-100">

@@ -153,6 +153,21 @@ CREATE INDEX IF NOT EXISTS idx_coupons_createdAt ON coupons(createdAt);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let db: any = null
 
+function sanitizeBind(params?: SqlValue[]): SqlValue[] | undefined {
+  if (!params || params.length === 0) return undefined
+  return params.map((v) => {
+    if (v === undefined) return null
+    if (v !== null && typeof v === 'object') return JSON.stringify(v)
+    return v
+  })
+}
+
+function execSql(sql: string, params?: SqlValue[]) {
+  const bind = sanitizeBind(params)
+  if (bind) db.exec({ sql, bind })
+  else db.exec(sql)
+}
+
 async function init() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sqlite3: any = await (sqlite3InitModule as any)({ print: console.log, printErr: console.error })
@@ -195,34 +210,49 @@ self.onmessage = (event: MessageEvent<WorkerMsg>) => {
   try {
     switch (msg.type) {
       case 'run': {
-        db.exec({ sql: msg.sql, bind: msg.params ?? [] })
+        execSql(msg.sql, msg.params)
         self.postMessage({ id: msg.id, ok: true })
         break
       }
 
       case 'query': {
         const rows: Record<string, SqlValue>[] = []
+        const bind = sanitizeBind(msg.params)
         db.exec({
           sql: msg.sql,
-          bind: msg.params ?? [],
+          ...(bind ? { bind } : {}),
           rowMode: 'object',
-          callback: (row: Record<string, SqlValue>) => { rows.push(row) },
+          callback: (row: Record<string, SqlValue>) => {
+            const safe: Record<string, SqlValue> = {}
+            for (const [key, value] of Object.entries(row)) {
+              safe[key] = typeof value === 'bigint' ? Number(value) : value
+            }
+            rows.push(safe)
+          },
         })
         self.postMessage({ id: msg.id, ok: true, rows })
         break
       }
 
       case 'transaction': {
-        db.exec('BEGIN')
-        try {
+        const runOps = () => {
           for (const op of msg.ops) {
-            db.exec({ sql: op.sql, bind: op.params ?? [] })
+            execSql(op.sql, op.params)
           }
-          db.exec('COMMIT')
-        } catch (err) {
-          db.exec('ROLLBACK')
-          throw err
         }
+        if (typeof db.transaction === 'function') {
+          db.transaction(runOps)
+        } else {
+          db.exec('BEGIN')
+          try {
+            runOps()
+            db.exec('COMMIT')
+          } catch (err) {
+            try { db.exec('ROLLBACK') } catch { /* ignore */ }
+            throw err
+          }
+        }
+        try { db.exec('PRAGMA wal_checkpoint(PASSIVE)') } catch { /* non-fatal */ }
         self.postMessage({ id: msg.id, ok: true })
         break
       }
