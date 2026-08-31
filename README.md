@@ -2,24 +2,26 @@
 
 A fast, modern, and offline-first Point of Sale for retail and billing desks. Record sales, print thermal receipts, park orders, and review local history — all in the browser, with no required backend.
 
-Built with React 19, TypeScript, Vite, and IndexedDB. Fully installable as a standalone PWA.
+Built with React 19, TypeScript, Vite, and SQLite (WASM + OPFS). Fully installable as a standalone PWA.
 
-**Version:** 1.0.41
+**Version:** 1.0.55
 
 ## Features
 
-- **Quick sale keypad** — Numeric pad plus keyboard input for high-speed billing. Responsive design adapts beautifully to both desktop (landscape) and mobile/tablet (portrait) with an integrated mini-order list.
+- **Quick sale keypad** — Numeric pad plus keyboard input for high-speed billing. Responsive design adapts to desktop (landscape) and mobile/tablet (portrait) with an integrated mini-order list.
 - **Entry parser** — Type `price*qty` (for example `30*3` or `30.50*2`). Decimal quantities work for weight/volume (`30*2.50` → ₹75.00).
-- **Smart product name suggestions** — The app learns product names from your sales history. When you enter a price, it suggests the most likely product based on price matching, frequency, recency, quantity patterns, and cart context. Accept, change, or dismiss suggestions inline. Configurable via settings.
+- **Smart product name suggestions** — The app learns product names from your sales history. When you enter a price, it suggests the most likely product based on price matching, frequency, recency, quantity patterns, and cart context. Accept, change, or dismiss suggestions inline.
 - **Inline product naming** — Rename any line item directly in the cart; names are learned for future suggestions.
 - **Checkout** — Cash, UPI, or card; optional cash tendered and change calculations.
+- **Coupons** — Create and apply discount coupons; print coupon slips on a thermal printer.
 - **Saved orders** — Park a cart as a draft and resume later.
-- **Sales history** — Browse completed invoices, reprint, edit, or cancel.
-- **Thermal printing** — ESC/POS over Web Bluetooth (58mm and 80mm). Robust chunking, retry mechanisms, and printer deduplication ensure reliable receipt generation.
+- **Sales history** — Browse invoices by date (defaults to the latest day with sales), reprint, edit, or cancel.
+- **Thermal printing** — ESC/POS over Web Bluetooth (58mm and 80mm). Chunking, retry, and printer deduplication for reliable receipts.
 - **Customer details** — Optional name, Indian mobile number, and email on a bill.
-- **Google Drive Backup & Restore** — Connect your Google Drive account using OAuth (fully compatible with desktop and standalone Android PWAs) to automatically or manually backup and restore all your sales, settings, and product data to a dedicated folder. Local JSON file backups are also supported.
-- **Offline-first** — Cart, settings, drafts, and sales persist in IndexedDB (Dexie), with a localStorage backup for completed sales.
-- **PWA** — Installable, auto-updating service worker, offline capable. Strict viewport controls prevent zooming on mobile devices for a native app feel.
+- **Local backups** — Download a JSON snapshot or the live SQLite database file. Restore from a JSON backup (including older v1 exports).
+- **Optional Supabase cloud** — Sync sales and coupons when enabled. Daily auto backup uploads the SQLite file to a Storage bucket.
+- **Offline-first** — Cart, settings, drafts, sales, coupons, and suggestion stats persist in SQLite (OPFS). First launch migrates data from IndexedDB if present.
+- **PWA** — Installable, auto-updating service worker, offline capable. Viewport controls prevent zooming on mobile for a native app feel.
 - **Daily digest email** — Optional Resend-powered summary of the day's sales at 10:00 PM local time.
 
 ## Tech stack
@@ -30,20 +32,22 @@ Built with React 19, TypeScript, Vite, and IndexedDB. Fully installable as a sta
 | Bundler | Vite 8 |
 | Styling | Tailwind CSS v4 |
 | State | Zustand |
-| Local DB | Dexie (IndexedDB) |
+| Local DB | SQLite WASM (`@sqlite.org/sqlite-wasm`) in a dedicated worker, stored in OPFS |
+| Legacy | Dexie / IndexedDB — one-time migration on first SQLite open |
 | Forms / validation | React Hook Form + Zod |
 | Tests | Vitest + Testing Library + jsdom |
 | Lint | oxlint |
-| Integrations | Resend API (Emails), Google Drive API (Backups), Web Bluetooth |
+| Integrations | Resend (emails), Supabase (optional sync + Storage backups), Web Bluetooth |
 | Deploy | Vercel (static app + serverless function) |
 
 ## Screens
 
-- **Quick Sale** — Amount display, keypad, product suggestion bar, live order panel, checkout. Adapts gracefully between landscape and portrait views.
+- **Quick Sale** — Amount display, keypad, product suggestion bar, live order panel, checkout.
 - **Saved Orders** — Draft carts waiting to be completed.
-- **Sales History** — Completed invoices and reprint.
-- **Printer Settings** — Pair Bluetooth printers, choose paper width, and toggle product suggestions.
-- **App Settings** — Business name, email (Resend) configuration, Google Drive connection, and data backup & restore.
+- **Sales History** — Completed invoices by date, reprint, edit, cancel.
+- **Coupons** — Create, list, and print coupons.
+- **Printer Settings** — Pair Bluetooth printers, choose paper width, toggle product suggestions.
+- **App Settings** — Business name, email (Resend), optional Supabase, JSON restore, SQLite download, cloud SQLite upload.
 
 ## Getting started
 
@@ -51,7 +55,7 @@ Built with React 19, TypeScript, Vite, and IndexedDB. Fully installable as a sta
 
 - Node.js 20+ recommended
 - npm
-- Chrome, Edge, or another Chromium browser for **Web Bluetooth** printing
+- Chrome, Edge, or another Chromium browser for **Web Bluetooth** printing and **OPFS** (SQLite storage)
 
 ### Install and run
 
@@ -96,7 +100,7 @@ The Vite dev server includes a local `POST /api/send-email` proxy so email works
 
 ### Product name suggestions
 
-The suggestion engine automatically learns from completed sales and builds a local index of products. As you type a price, the system:
+The suggestion engine learns from completed sales and builds a local index of products. As you type a price, the system:
 
 1. **Price matches** — Finds products sold at similar price points using a Gaussian + price-bucket model.
 2. **Frequency scores** — Ranks frequently sold products higher.
@@ -104,11 +108,11 @@ The suggestion engine automatically learns from completed sales and builds a loc
 4. **Quantity patterns** — Detects whether a product is typically sold by piece or by weight.
 5. **Cart associations** — If other items in the cart are often bought together with a product, it ranks higher.
 
-The engine uses **incremental dirty tracking** and a **price-bucket index** for fast lookups — performance stays constant regardless of data size. Suggestions can be disabled entirely in Printer Settings if desired.
+The engine uses incremental dirty tracking and a price-bucket index for fast lookups. Suggestions can be disabled in Printer Settings.
 
 ### Checkout
 
-Open checkout from the order panel. Choose **cash**, **UPI**, or **card**. For cash you can enter amount paid; change is calculated. Optionally print the receipt immediately.
+Open checkout from the order panel. Choose **cash**, **UPI**, or **card**. For cash you can enter amount paid; change is calculated. Optionally print the receipt immediately. A coupon can be applied when one is available.
 
 ### Printing (Web Bluetooth)
 
@@ -117,15 +121,44 @@ Open checkout from the order panel. Choose **cash**, **UPI**, or **card**. For c
 3. Choose **58mm** or **80mm**.
 4. Print from checkout or reprint from sales history.
 
-The printer service handles reconnection, dropped packets, and auto-chunking (20-byte payload per write) to reliably support inexpensive BLE thermal printers.
+The printer service handles reconnection, dropped packets, and auto-chunking (20-byte payload per write) for inexpensive BLE thermal printers.
 
-### Cloud and Local Backup
+### Sales history
+
+Open **Sales History**. The date filter starts on the **latest day that has sales** (not necessarily today). Use the date picker to jump to another day; min/max dates follow your actual invoices.
+
+### Backup and restore
 
 In **App settings → Data Management**:
 
-- **Google Drive** — Enter your Google OAuth Client ID to connect. Supports standalone Android PWAs (via implicit redirect flow) and desktop Chrome (via popup flow).
-- **Auto Backup** — Runs a daily scheduled backup directly to the `QuickSale_Backups` folder in your Drive.
-- **Local File** — Export all data as a single `.json` file and restore it on any device.
+| Action | What it does |
+| --- | --- |
+| **Download JSON backup** | Exports sales, drafts, settings, coupons, and suggestion stats as a `.json` file. |
+| **Restore from JSON** | Replaces local SQLite data from a JSON backup. Supports current and older **v1** files (line items nested as objects). |
+| **Download SQLite database** | Saves the live OPFS database as `{business}_sqlite_YYYY-MM-DD.sqlite3` (full dump via SQLite WASM export). |
+| **Upload SQLite to Supabase** | Uploads that same `.sqlite3` file to your Storage backup bucket (requires cloud settings below). |
+
+**Restore notes**
+
+- JSON restore is the portable way to move data between browsers or after clearing site data.
+- After restore, check **Sales History** on the dates your bills were actually created — they may not be “today”.
+- SQLite download is a snapshot of the database file; it is not imported back through the JSON restore button.
+
+### Optional Supabase
+
+In **App settings**, enable cloud and enter:
+
+- Project URL
+- Anon (public) key
+- Backup bucket name (Storage)
+
+When enabled:
+
+- Completed sales and coupons can sync to Postgres.
+- **Auto backup** (same 10:00 PM local window as the daily digest, or every 12 hours) uploads the SQLite file to Storage as `{business}_sqlite_YYYY-MM-DD.sqlite3`.
+- The browser must be **open** at backup time for the scheduled upload to run.
+
+The anon key needs Storage **upload** (and upsert) on that bucket. Restrict the bucket in the Supabase dashboard; do not treat the key as a secret for server-only work, but do not grant more than backup upload needs.
 
 ### Email and daily digest
 
@@ -133,12 +166,14 @@ In **App settings**, configure your Resend API key (`re_…`), From, and To addr
 
 ## Data and privacy
 
-All operational data lives **in the user's browser**:
+Operational data lives **in the user's browser** (SQLite in Origin Private File System):
 
-- Saved orders, completed sales, and cart state
-- Settings, counters, and the product suggestion index
+- Saved orders, completed sales, cart state
+- Settings, counters, coupons, and the product suggestion index
 
-There is no mandatory cloud backend. Data is entirely yours. Keep your Resend API keys and Google OAuth Client IDs secure.
+There is no mandatory cloud backend. Optional Supabase is off until you enable it. Keep Resend API keys and Supabase credentials secure.
+
+First launch after the SQLite migration copies data from the previous IndexedDB (Dexie) store, then continues on SQLite only.
 
 ## Deploy
 
@@ -150,9 +185,10 @@ npm run build
 
 ## Architecture highlights
 
-- **Suggestion engine**: Designed for constant-time performance using a `Map`-based stats cache and price-bucket indexing, yielding smooth non-blocking interactions.
-- **PWA robustness**: Comprehensive service worker config, custom pull-to-refresh prevention on mobile devices, iOS touch optimizations, and OAuth flow management tailored for standalone PWAs.
-- **Bluetooth printing**: Complex GATT connection handling abstracting `network_error` dropouts and providing resilient auto-reconnect logic.
+- **SQLite worker**: All SQL runs in a Web Worker. Nested JSON (sale line items, settings blobs) is stored as TEXT. Export uses `sqlite3_js_db_export` because the OPFS database handle has no `.export()` method.
+- **Suggestion engine**: Map-based stats cache and price-bucket indexing for constant-time lookups.
+- **PWA**: Service worker, pull-to-refresh prevention on mobile, iOS touch optimizations.
+- **Bluetooth printing**: GATT handling for `network_error` dropouts and auto-reconnect.
 
 ## License
 
