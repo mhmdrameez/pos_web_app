@@ -241,7 +241,7 @@ export function AppSettingsView() {
     setDownloadingSqlite(true)
     try {
       const bytes = await sqlExport()
-      const blob = new Blob([bytes], { type: 'application/x-sqlite3' })
+      const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/x-sqlite3' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')

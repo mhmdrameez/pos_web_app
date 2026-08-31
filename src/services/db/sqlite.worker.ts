@@ -234,7 +234,7 @@ self.onmessage = (event: MessageEvent<WorkerMsg>) => {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-call
         const bytes: Uint8Array = db.export() as Uint8Array
         // Transfer the underlying ArrayBuffer (zero-copy) to the main thread.
-        self.postMessage({ id: msg.id, ok: true, bytes }, [bytes.buffer])
+        self.postMessage({ id: msg.id, ok: true, bytes }, { transfer: [bytes.buffer as ArrayBuffer] })
         break
       }
 
