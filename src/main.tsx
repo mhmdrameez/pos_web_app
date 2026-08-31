@@ -2,14 +2,33 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { initSQLiteClient } from './services/db/sqliteClient'
+import { initializeDatabase } from './services/db/database'
+import { runDexieMigrationIfNeeded } from './services/db/dexieMigration'
 import { startDailyDigestScheduler } from './services/email/dailyDigestScheduler'
 import { startDailyBackupScheduler } from './services/backup/autoBackupScheduler'
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+// Initialise the SQLite database (Web Worker + OPFS) before mounting React.
+// The UI renders a loading state until isDbReady is set by App/useAppStore.
+initSQLiteClient()
+  .then(() => initializeDatabase())
+  .then(() => runDexieMigrationIfNeeded())
+  .then(() => {
+    createRoot(document.getElementById('root')!).render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    )
+  })
+  .catch((err: unknown) => {
+    console.error('[Boot] Failed to initialise SQLite database:', err)
+    // Render anyway — the app will show an error state or work in degraded mode
+    createRoot(document.getElementById('root')!).render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    )
+  })
 
 // Start background schedulers
 startDailyDigestScheduler()

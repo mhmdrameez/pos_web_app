@@ -1,4 +1,5 @@
 import { defineConfig, type Plugin } from 'vitest/config'
+import type { OutgoingHttpHeaders } from 'node:http'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -13,6 +14,34 @@ const pkg = JSON.parse(readFileSync('./package.json', 'utf-8')) as { version: st
 // This avoids CORS entirely — the call to Resend happens from Node.js,
 // not from the browser. No separate Express server needed.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// COOP / COEP Header Plugin
+// Required for @sqlite.org/sqlite-wasm with opfs-sahpool VFS.
+// SharedArrayBuffer (needed by WASM threads) is only available when the page
+// is cross-origin isolated.
+// ---------------------------------------------------------------------------
+function coopCoepPlugin(): Plugin {
+  const HEADERS: OutgoingHttpHeaders = {
+    'Cross-Origin-Opener-Policy':  'same-origin',
+    'Cross-Origin-Embedder-Policy': 'require-corp',
+  }
+  return {
+    name: 'coop-coep',
+    configureServer(server) {
+      server.middlewares.use((_req, res, next) => {
+        Object.entries(HEADERS).forEach(([k, v]) => res.setHeader(k, v as string))
+        next()
+      })
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use((_req, res, next) => {
+        Object.entries(HEADERS).forEach(([k, v]) => res.setHeader(k, v as string))
+        next()
+      })
+    },
+  }
+}
+
 function emailApiPlugin(): Plugin {
   return {
     name: 'email-api',
@@ -98,6 +127,7 @@ function emailApiPlugin(): Plugin {
 
 export default defineConfig({
   plugins: [
+    coopCoepPlugin(),
     emailApiPlugin(),
     react(),
     tailwindcss(),
@@ -140,7 +170,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2,wasm}'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -154,6 +184,11 @@ export default defineConfig({
       },
     }),
   ],
+  optimizeDeps: {
+    // @sqlite.org/sqlite-wasm ships its own WASM loader — exclude from Vite
+    // bundling so the WASM file is served as-is.
+    exclude: ['@sqlite.org/sqlite-wasm'],
+  },
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
   },

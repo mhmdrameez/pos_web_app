@@ -1,4 +1,4 @@
-import { db } from './database'
+import { getAllTableRows } from './database'
 
 export interface BackupData {
   version: number
@@ -13,11 +13,12 @@ export interface BackupData {
     productStats: unknown[]
     productPairs: unknown[]
     suggestionMeta: unknown[]
+    coupons: unknown[]
   }
 }
 
 /**
- * Generate a complete BackupData object from all IndexedDB tables.
+ * Generate a complete BackupData object from all SQLite tables.
  */
 export async function generateBackupData(): Promise<BackupData> {
   const [
@@ -30,20 +31,22 @@ export async function generateBackupData(): Promise<BackupData> {
     productStats,
     productPairs,
     suggestionMeta,
+    coupons,
   ] = await Promise.all([
-    db.completedSales.toArray(),
-    db.savedOrders.toArray(),
-    db.settings.toArray(),
-    db.printerSettings.toArray(),
-    db.cart.toArray(),
-    db.counters.toArray(),
-    db.productStats.toArray(),
-    db.productPairs.toArray(),
-    db.suggestionMeta.toArray(),
+    getAllTableRows('completedSales'),
+    getAllTableRows('savedOrders'),
+    getAllTableRows('settings'),
+    getAllTableRows('printerSettings'),
+    getAllTableRows('cart'),
+    getAllTableRows('counters'),
+    getAllTableRows('productStats'),
+    getAllTableRows('productPairs'),
+    getAllTableRows('suggestionMeta'),
+    getAllTableRows('coupons'),
   ])
 
   return {
-    version: 1,
+    version: 2,
     createdAt: new Date().toISOString(),
     tables: {
       completedSales,
@@ -55,6 +58,7 @@ export async function generateBackupData(): Promise<BackupData> {
       productStats,
       productPairs,
       suggestionMeta,
+      coupons,
     },
   }
 }
@@ -69,7 +73,7 @@ export function getBackupFilename(businessName: string): string {
 }
 
 /**
- * Export all IndexedDB tables into a single JSON backup file and trigger a download.
+ * Export all SQLite tables into a single JSON backup file and trigger a download.
  */
 export async function exportBackup(businessName: string): Promise<string> {
   const backup = await generateBackupData()
@@ -114,12 +118,14 @@ function parseBackupFile(content: string): BackupData {
     'productStats',
     'productPairs',
     'suggestionMeta',
+    'coupons',
   ] as const
 
   for (const table of requiredTables) {
     if (!Array.isArray(data.tables[table])) {
-      // Allow missing tables — treat as empty
-      data.tables[table] = []
+      // Allow missing tables — treat as empty (handles v1 backups without coupons)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(data.tables as any)[table] = []
     }
   }
 
@@ -129,7 +135,14 @@ function parseBackupFile(content: string): BackupData {
 /**
  * Import a backup file, replacing all existing data.
  * Returns a summary of what was imported.
+ *
+ * Supports both v1 backups (Dexie/IndexedDB export) and v2 backups (SQLite export).
+ * v1 rows have JSON-serialised objects for nested fields; v2 rows have flat SQL columns.
  */
+import { sqlRun, sqlTransaction } from './sqliteClient'
+import type { CompletedSale, SavedOrder, Coupon, AppSettings, PrinterSettings, CartSnapshot } from '../../types'
+import type { ProductStat, ProductPairStat } from '../../types/suggestion'
+
 export async function importBackup(file: File): Promise<{
   salesCount: number
   ordersCount: number
@@ -138,49 +151,215 @@ export async function importBackup(file: File): Promise<{
   const content = await file.text()
   const backup = parseBackupFile(content)
 
-  // Use a transaction to replace all data atomically
-  const allTables = [
-    db.completedSales,
-    db.savedOrders,
-    db.settings,
-    db.printerSettings,
-    db.cart,
-    db.counters,
-    db.productStats,
-    db.productPairs,
-    db.suggestionMeta,
-  ]
-  await db.transaction('rw', allTables, async () => {
-      // Clear all tables
-      await Promise.all([
-        db.completedSales.clear(),
-        db.savedOrders.clear(),
-        db.settings.clear(),
-        db.printerSettings.clear(),
-        db.cart.clear(),
-        db.counters.clear(),
-        db.productStats.clear(),
-        db.productPairs.clear(),
-        db.suggestionMeta.clear(),
-      ])
+  const isV1 = backup.version === 1
 
-      // Import all data
-      const t = backup.tables
-      if (t.completedSales.length > 0) await db.completedSales.bulkPut(t.completedSales as never[])
-      if (t.savedOrders.length > 0) await db.savedOrders.bulkPut(t.savedOrders as never[])
-      if (t.settings.length > 0) await db.settings.bulkPut(t.settings as never[])
-      if (t.printerSettings.length > 0) await db.printerSettings.bulkPut(t.printerSettings as never[])
-      if (t.cart.length > 0) await db.cart.bulkPut(t.cart as never[])
-      if (t.counters.length > 0) await db.counters.bulkPut(t.counters as never[])
-      if (t.productStats.length > 0) await db.productStats.bulkPut(t.productStats as never[])
-      if (t.productPairs.length > 0) await db.productPairs.bulkPut(t.productPairs as never[])
-      if (t.suggestionMeta.length > 0) await db.suggestionMeta.bulkPut(t.suggestionMeta as never[])
-    },
-  )
+  // Clear all tables first
+  const clearOps = [
+    { sql: 'DELETE FROM completedSales' },
+    { sql: 'DELETE FROM savedOrders' },
+    { sql: 'DELETE FROM settings' },
+    { sql: 'DELETE FROM printerSettings' },
+    { sql: 'DELETE FROM cart' },
+    { sql: 'DELETE FROM counters' },
+    { sql: 'DELETE FROM productStats' },
+    { sql: 'DELETE FROM productPairs' },
+    { sql: 'DELETE FROM suggestionMeta' },
+    { sql: 'DELETE FROM coupons' },
+  ]
+  await sqlTransaction(clearOps)
+
+  const t = backup.tables
+
+  // ── completedSales ──────────────────────────────────────────────────────
+  for (const raw of t.completedSales as (CompletedSale | Record<string, unknown>)[]) {
+    const s = raw as CompletedSale
+    await sqlRun(
+      `INSERT OR REPLACE INTO completedSales
+        (id, invoiceNumber, orderNumber, status, createdAt, updatedAt, completedAt,
+         customer, items, subtotalPaise, discountPaise, grandTotalPaise,
+         paymentMethod, amountPaidPaise, changePaise, emailSentAt,
+         appliedCouponCode, issuedCouponCode)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        s.id, s.invoiceNumber, s.orderNumber, s.status,
+        s.createdAt, s.updatedAt, s.completedAt,
+        // v1: customer is already an object; v2: already a JSON string or null
+        isV1 ? (s.customer ? JSON.stringify(s.customer) : null) : ((raw as Record<string,unknown>).customer as string | null ?? null),
+        isV1 ? JSON.stringify(s.items) : ((raw as Record<string,unknown>).items as string),
+        s.subtotalPaise, s.discountPaise, s.grandTotalPaise,
+        s.paymentMethod,
+        s.amountPaidPaise ?? null,
+        s.changePaise     ?? null,
+        s.emailSentAt     ?? null,
+        s.appliedCouponCode ?? null,
+        s.issuedCouponCode  ?? null,
+      ],
+    )
+  }
+
+  // ── savedOrders ─────────────────────────────────────────────────────────
+  for (const raw of t.savedOrders as (SavedOrder | Record<string, unknown>)[]) {
+    const o = raw as SavedOrder
+    await sqlRun(
+      `INSERT OR REPLACE INTO savedOrders
+        (id, orderNumber, status, createdAt, updatedAt, customer, items,
+         subtotalPaise, discountPaise, grandTotalPaise)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      [
+        o.id, o.orderNumber, o.status, o.createdAt, o.updatedAt,
+        isV1 ? (o.customer ? JSON.stringify(o.customer) : null) : ((raw as Record<string,unknown>).customer as string | null ?? null),
+        isV1 ? JSON.stringify(o.items) : ((raw as Record<string,unknown>).items as string),
+        o.subtotalPaise, o.discountPaise, o.grandTotalPaise,
+      ],
+    )
+  }
+
+  // ── settings ────────────────────────────────────────────────────────────
+  for (const raw of t.settings as (AppSettings & { id: string } | Record<string, unknown>)[]) {
+    const s = raw as AppSettings & { id: string }
+    if (isV1) {
+      await sqlRun(
+        `INSERT OR REPLACE INTO settings
+          (id, businessName, emailSettings, supabaseSettings, backupSettings)
+         VALUES (?,?,?,?,?)`,
+        [
+          s.id, s.businessName,
+          s.emailSettings    ? JSON.stringify(s.emailSettings)    : null,
+          s.supabaseSettings ? JSON.stringify(s.supabaseSettings) : null,
+          s.backupSettings   ? JSON.stringify(s.backupSettings)   : null,
+        ],
+      )
+    } else {
+      const r = raw as Record<string, unknown>
+      await sqlRun(
+        `INSERT OR REPLACE INTO settings
+          (id, businessName, emailSettings, supabaseSettings, backupSettings)
+         VALUES (?,?,?,?,?)`,
+        [r.id as string, r.businessName as string, r.emailSettings as string | null, r.supabaseSettings as string | null, r.backupSettings as string | null],
+      )
+    }
+  }
+
+  // ── printerSettings ─────────────────────────────────────────────────────
+  for (const raw of t.printerSettings as (PrinterSettings & { id: string } | Record<string, unknown>)[]) {
+    const p = raw as PrinterSettings & { id: string }
+    if (isV1) {
+      await sqlRun(
+        `INSERT OR REPLACE INTO printerSettings
+          (id, paperWidth, deviceId, deviceName, pairedPrinters, showSuggestions)
+         VALUES (?,?,?,?,?,?)`,
+        [
+          p.id, p.paperWidth,
+          p.deviceId   ?? null, p.deviceName ?? null,
+          p.pairedPrinters ? JSON.stringify(p.pairedPrinters) : null,
+          p.showSuggestions != null ? (p.showSuggestions ? 1 : 0) : null,
+        ],
+      )
+    } else {
+      const r = raw as Record<string, unknown>
+      await sqlRun(
+        `INSERT OR REPLACE INTO printerSettings
+          (id, paperWidth, deviceId, deviceName, pairedPrinters, showSuggestions)
+         VALUES (?,?,?,?,?,?)`,
+        [r.id as string, r.paperWidth as number, r.deviceId as string | null, r.deviceName as string | null, r.pairedPrinters as string | null, r.showSuggestions as number | null],
+      )
+    }
+  }
+
+  // ── cart ────────────────────────────────────────────────────────────────
+  for (const raw of t.cart as (CartSnapshot & { id: string } | Record<string, unknown>)[]) {
+    const c = raw as CartSnapshot & { id: string }
+    if (isV1) {
+      await sqlRun(
+        `INSERT OR REPLACE INTO cart (id, items, currentAmount, customer, discountPaise) VALUES (?,?,?,?,?)`,
+        [
+          c.id,
+          JSON.stringify(c.items),
+          c.currentAmount,
+          c.customer ? JSON.stringify(c.customer) : null,
+          c.discountPaise,
+        ],
+      )
+    } else {
+      const r = raw as Record<string, unknown>
+      await sqlRun(
+        `INSERT OR REPLACE INTO cart (id, items, currentAmount, customer, discountPaise) VALUES (?,?,?,?,?)`,
+        [r.id as string, r.items as string, r.currentAmount as string, r.customer as string | null, r.discountPaise as number],
+      )
+    }
+  }
+
+  // ── counters ────────────────────────────────────────────────────────────
+  for (const raw of t.counters as Record<string, unknown>[]) {
+    await sqlRun(
+      `INSERT OR REPLACE INTO counters
+        (id, invoiceSequence, orderSequence, salesCount, latestCompletedAt)
+       VALUES (?,?,?,?,?)`,
+      [
+        raw.id as string,
+        raw.invoiceSequence as number,
+        raw.orderSequence   as number,
+        (raw.salesCount         ?? 0) as number,
+        (raw.latestCompletedAt  ?? 0) as number,
+      ],
+    )
+  }
+
+  // ── productStats ────────────────────────────────────────────────────────
+  for (const raw of t.productStats as (ProductStat | Record<string, unknown>)[]) {
+    const s = raw as ProductStat
+    await sqlRun(
+      `INSERT OR REPLACE INTO productStats
+        (productKey, displayName, totalCount, confirmedCount, rejectedCount,
+         minPricePaise, maxPricePaise, sumPricePaise, sumPriceSq,
+         integerQtyCount, decimalQtyCount, lastSoldAt, recencyMass,
+         observationCount, priceBuckets)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        s.productKey, s.displayName, s.totalCount, s.confirmedCount, s.rejectedCount,
+        s.minPricePaise, s.maxPricePaise, s.sumPricePaise, s.sumPriceSq,
+        s.integerQtyCount, s.decimalQtyCount, s.lastSoldAt, s.recencyMass,
+        s.observationCount,
+        isV1 ? JSON.stringify(s.priceBuckets) : ((raw as Record<string,unknown>).priceBuckets as string ?? '[]'),
+      ],
+    )
+  }
+
+  // ── productPairs ────────────────────────────────────────────────────────
+  for (const raw of t.productPairs as ProductPairStat[]) {
+    await sqlRun(
+      'INSERT OR REPLACE INTO productPairs (id, count, lastSeenAt) VALUES (?,?,?)',
+      [raw.id, raw.count, raw.lastSeenAt],
+    )
+  }
+
+  // ── suggestionMeta ──────────────────────────────────────────────────────
+  for (const raw of t.suggestionMeta as { id: string; fingerprint: string; rebuiltAt: number }[]) {
+    await sqlRun(
+      'INSERT OR REPLACE INTO suggestionMeta (id, fingerprint, rebuiltAt) VALUES (?,?,?)',
+      [raw.id, raw.fingerprint, raw.rebuiltAt],
+    )
+  }
+
+  // ── coupons ─────────────────────────────────────────────────────────────
+  for (const raw of t.coupons as (Coupon | Record<string, unknown>)[]) {
+    const c = raw as Coupon
+    await sqlRun(
+      `INSERT OR REPLACE INTO coupons
+        (id, code, amountPaise, status, createdAt, usedAt, expiresAt, customerName)
+       VALUES (?,?,?,?,?,?,?,?)`,
+      [
+        c.id, c.code, c.amountPaise, c.status, c.createdAt,
+        c.usedAt       ?? null,
+        c.expiresAt    ?? null,
+        c.customerName ?? null,
+      ],
+    )
+  }
 
   return {
-    salesCount: backup.tables.completedSales.length,
-    ordersCount: backup.tables.savedOrders.length,
-    productsCount: backup.tables.productStats.length,
+    salesCount: t.completedSales.length,
+    ordersCount: t.savedOrders.length,
+    productsCount: t.productStats.length,
   }
 }

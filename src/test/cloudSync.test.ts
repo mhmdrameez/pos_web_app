@@ -5,13 +5,10 @@ import {
   toSupabaseRow,
   syncAllPendingSales,
 } from '../services/cloud/supabaseSync'
-import { db } from '../services/db/database'
 import type { CompletedSale } from '../types'
 
 describe('supabaseSync and periodic cloud sync', () => {
-  beforeEach(async () => {
-    await db.delete()
-    await db.open()
+  beforeEach(() => {
     localStorage.removeItem('quick-sale-pos:completed-sales')
   })
 

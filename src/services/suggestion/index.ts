@@ -1,7 +1,7 @@
 import type { CartItem, CompletedSale } from '../../types'
 import type { LearnObservation, LineNameSource } from '../../types/suggestion'
 import {
-  db,
+  getCompletedSales,
   computeSalesFingerprintFast,
   computeSalesFingerprint,
   getSuggestionMeta,
@@ -74,7 +74,7 @@ export async function rebuildProductSuggestionIndex(): Promise<void> {
   productSuggestionEngine.reset()
 
   // Collect all sale IDs first, then process in batches
-  const allSales = await db.completedSales.toArray()
+  const allSales = await getCompletedSales()
   for (let i = 0; i < allSales.length; i += REBUILD_BATCH_SIZE) {
     const batch = allSales.slice(i, i + REBUILD_BATCH_SIZE)
     for (const sale of batch) {
