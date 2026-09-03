@@ -58,18 +58,12 @@ export function OrderItemRow({ id, name, unitPricePaise, quantity }: OrderItemRo
             <input
               key={`${id}:${productName ?? ''}`}
               defaultValue={productName ?? ''}
-              readOnly={Boolean(editingSale)}
+              readOnly={true}
               onClick={() => {
-                if (editingSale) setPickerOpen(true)
+                setPickerOpen(true)
               }}
-              onBlur={(event) => {
-                if (editingSale) return
-                applyProductName(event.target.value)
-              }}
-              placeholder={editingSale ? 'select product' : 'item'}
-              className={`text-xs text-gray-500 bg-transparent outline-none focus:ring-2 focus:ring-primary/30 rounded px-0.5 min-w-[3rem] ${
-                editingSale ? 'max-w-[10rem] cursor-pointer' : 'max-w-[7rem]'
-              }`}
+              placeholder="select product"
+              className="text-xs text-gray-500 bg-transparent outline-none focus:ring-2 focus:ring-primary/30 rounded px-0.5 min-w-[3rem] max-w-[10rem] cursor-pointer"
               aria-label="Product name"
             />
             )
