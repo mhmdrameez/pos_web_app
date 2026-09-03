@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { useAppStore } from '../../stores/useAppStore'
 import type { SidebarView } from '../../types'
+import { NetworkStatusLED } from './NetworkStatusLED'
 
 const navItems: { id: SidebarView; label: string; icon: typeof History }[] = [
   { id: 'quick-sale', label: 'Quick Sale', icon: Calculator },
@@ -60,7 +61,9 @@ export function Sidebar() {
           </button>
         ))}
       </nav>
-      <div className="flex flex-col items-center gap-1">
+      <div className="flex flex-col items-center gap-2">
+        {/* Network LED indicator */}
+        <NetworkStatusLED />
         <div className="w-12 h-12 rounded-xl bg-primary text-white grid place-items-center text-[10px] font-bold tracking-tight">
           POS
         </div>
