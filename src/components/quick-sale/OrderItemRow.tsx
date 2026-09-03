@@ -20,7 +20,6 @@ export function OrderItemRow({ id, name, unitPricePaise, quantity }: OrderItemRo
   const removeItem = useCartStore((s) => s.removeItem)
   const showConfirm = useAppStore((s) => s.showConfirm)
   const { lineLabel, productName } = splitLineDisplay(name, unitPricePaise, quantity)
-  const editingSale = useCartStore((s) => s.editingSale)
   const [pickerOpen, setPickerOpen] = useState(false)
 
   function applyProductName(nextName: string) {
