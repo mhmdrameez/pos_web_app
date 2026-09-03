@@ -40,8 +40,12 @@ describe('product name helpers', () => {
     expect(composeLineName(2900, 4, 'Lining')).toBe('29 x 4 (Lining)')
   })
 
-  it('normalizes product keys', () => {
+  it('normalizes product keys ignoring case, spaces, and punctuation', () => {
     expect(normalizeProductKey('  lining ')).toBe('lining')
+    expect(normalizeProductKey('LINING')).toBe('lining')
+    expect(normalizeProductKey('Cotton  Mix')).toBe('cottonmix')
+    expect(normalizeProductKey('cotton mix')).toBe('cottonmix')
+    expect(normalizeProductKey('Cotton-Mix')).toBe('cottonmix')
   })
 })
 
@@ -216,6 +220,65 @@ describe('product suggestion engine', () => {
 
     const result = engine.suggest({ unitPricePaise: 25000, quantity: 1, cartProductKeys: [] })
     expect(result.best?.displayName).toBe('Cotton Shirt')
+  })
+
+  it('treats the same name with different case or spaces as one product', () => {
+    learn(engine, 'Lining', 29, 2.5, 2)
+    learn(engine, 'LINING', 29, 2.5, 2)
+    learn(engine, ' lining ', 29, 2.5, 2)
+    const stats = engine.getAllProductStats()
+    expect(stats).toHaveLength(1)
+    expect(stats[0].displayName).toBe('Lining')
+    expect(engine.getKnownProducts()).toHaveLength(1)
+  })
+
+  it('merges duplicate catalog rows on load', () => {
+    const now = Date.now()
+    engine.load(
+      [
+        {
+          productKey: 'Lining',
+          displayName: 'Lining',
+          totalCount: 3,
+          confirmedCount: 3,
+          rejectedCount: 0,
+          minPricePaise: 2900,
+          maxPricePaise: 2900,
+          sumPricePaise: 8700,
+          sumPriceSq: 25_230_000,
+          integerQtyCount: 0,
+          decimalQtyCount: 3,
+          lastSoldAt: now,
+          recencyMass: 3,
+          observationCount: 3,
+          priceBuckets: [{ paise: 2900, count: 3 }],
+        },
+        {
+          productKey: 'lining',
+          displayName: 'lining',
+          totalCount: 2,
+          confirmedCount: 2,
+          rejectedCount: 0,
+          minPricePaise: 2900,
+          maxPricePaise: 3200,
+          sumPricePaise: 6100,
+          sumPriceSq: 18_730_000,
+          integerQtyCount: 0,
+          decimalQtyCount: 2,
+          lastSoldAt: now - 1000,
+          recencyMass: 2,
+          observationCount: 2,
+          priceBuckets: [{ paise: 2900, count: 2 }],
+        },
+      ],
+      [],
+    )
+    const stats = engine.getAllProductStats()
+    expect(stats).toHaveLength(1)
+    expect(stats[0].productKey).toBe('lining')
+    expect(stats[0].displayName).toBe('Lining')
+    expect(stats[0].totalCount).toBe(5)
+    expect(engine.hasDirty()).toBe(true)
   })
 
   it('supports removing a product completely', () => {

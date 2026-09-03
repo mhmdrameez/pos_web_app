@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { RankedSuggestion } from '../types/suggestion'
 import { usePrinterStore } from './usePrinterStore'
+import { useCartStore } from './useCartStore'
 
 interface SuggestionUiState {
   queryKey: string
@@ -64,9 +65,10 @@ export const useSuggestionUiStore = create<SuggestionUiState>((set, get) => ({
 }))
 
 export function resolveAddItemName(): { name?: string; source?: 'suggested' | 'manual' } {
-  // When suggestions are turned off, never attach a product name
+  // When suggestions are turned off, never attach a product name — except while editing a bill.
+  const editingBill = Boolean(useCartStore.getState().editingSale)
   const showSuggestions = usePrinterStore.getState().showSuggestions
-  if (showSuggestions === false) return {}
+  if (showSuggestions === false && !editingBill) return {}
 
   const state = useSuggestionUiStore.getState()
   if (state.dismissed || !state.best) return {}

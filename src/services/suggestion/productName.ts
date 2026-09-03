@@ -3,7 +3,11 @@ const GENERIC_ITEM_NAME = /^item\s+[a-z0-9]+$/i
 const BRACKETED_LINE = /^(\d+(?:\.\d+)?\s*[x×]\s*\d+(?:\.\d+)?)\s*\((.+)\)\s*$/i
 
 export function normalizeProductKey(name: string): string {
-  return name.trim().replace(/\s+/g, ' ').toLowerCase()
+  return name
+    .normalize('NFKC')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, '')
+    .toLowerCase()
 }
 
 export function formatDisplayName(name: string): string {

@@ -1,9 +1,11 @@
 import { Minus, Plus, Trash2 } from 'lucide-react'
+import { useState } from 'react'
 import { useCartStore } from '../../stores/useCartStore'
 import { useAppStore } from '../../stores/useAppStore'
 import { formatRupees } from '../../utils/money'
 import { productSuggestionEngine } from '../../services/suggestion/engine'
 import { productNameFromLine, splitLineDisplay } from '../../services/suggestion/productName'
+import { ProductNameModal } from './ProductNamePicker'
 
 interface OrderItemRowProps {
   id: string
@@ -18,6 +20,24 @@ export function OrderItemRow({ id, name, unitPricePaise, quantity }: OrderItemRo
   const removeItem = useCartStore((s) => s.removeItem)
   const showConfirm = useAppStore((s) => s.showConfirm)
   const { lineLabel, productName } = splitLineDisplay(name, unitPricePaise, quantity)
+  const editingSale = useCartStore((s) => s.editingSale)
+  const [pickerOpen, setPickerOpen] = useState(false)
+
+  function applyProductName(nextName: string) {
+    const trimmed = nextName.trim()
+    updateItemName(id, trimmed)
+    setPickerOpen(false)
+    if (!trimmed) return
+    const learned = productNameFromLine(trimmed) ?? trimmed
+    productSuggestionEngine.learn({
+      displayName: learned,
+      unitPricePaise,
+      quantity,
+      soldAt: Date.now(),
+      weight: 3,
+      source: 'manual',
+    })
+  }
 
   function handleDecrease() {
     const result = updateQuantity(id, -1)
@@ -38,22 +58,18 @@ export function OrderItemRow({ id, name, unitPricePaise, quantity }: OrderItemRo
             <input
               key={`${id}:${productName ?? ''}`}
               defaultValue={productName ?? ''}
-              onBlur={(event) => {
-                const nextName = event.target.value.trim()
-                updateItemName(id, nextName)
-                if (!nextName) return
-                const learned = productNameFromLine(nextName) ?? nextName
-                productSuggestionEngine.learn({
-                  displayName: learned,
-                  unitPricePaise,
-                  quantity,
-                  soldAt: Date.now(),
-                  weight: 3,
-                  source: 'manual',
-                })
+              readOnly={Boolean(editingSale)}
+              onClick={() => {
+                if (editingSale) setPickerOpen(true)
               }}
-              placeholder="item"
-              className="text-xs text-gray-500 bg-transparent outline-none focus:ring-2 focus:ring-primary/30 rounded px-0.5 min-w-[3rem] max-w-[7rem]"
+              onBlur={(event) => {
+                if (editingSale) return
+                applyProductName(event.target.value)
+              }}
+              placeholder={editingSale ? 'select product' : 'item'}
+              className={`text-xs text-gray-500 bg-transparent outline-none focus:ring-2 focus:ring-primary/30 rounded px-0.5 min-w-[3rem] ${
+                editingSale ? 'max-w-[10rem] cursor-pointer' : 'max-w-[7rem]'
+              }`}
               aria-label="Product name"
             />
             )
@@ -97,6 +113,14 @@ export function OrderItemRow({ id, name, unitPricePaise, quantity }: OrderItemRo
       >
         <Trash2 className="w-4 h-4" />
       </button>
+
+      <ProductNameModal
+        open={pickerOpen}
+        title="Select Product"
+        initialName={productName ?? ''}
+        onClose={() => setPickerOpen(false)}
+        onPick={applyProductName}
+      />
     </div>
   )
 }

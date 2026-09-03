@@ -14,7 +14,9 @@ import {
   addManualProduct,
   removeManualProduct,
   getKnownProductStats,
+  mergeDuplicateProducts,
 } from '../../services/suggestion'
+import { normalizeProductKey } from '../../services/suggestion/productName'
 import { useAppStore } from '../../stores/useAppStore'
 import { formatRupees, rupeesToPaise } from '../../utils/money'
 import type { ProductStat } from '../../types/suggestion'
@@ -38,8 +40,13 @@ export function ProductsView() {
   }
 
   useEffect(() => {
-    refreshProducts()
-  }, [])
+    void mergeDuplicateProducts().then((mergedCount) => {
+      refreshProducts()
+      if (mergedCount > 0) {
+        addToast('success', `Merged ${mergedCount} duplicate product name${mergedCount === 1 ? '' : 's'}`)
+      }
+    })
+  }, [addToast])
 
   async function handleAddProduct(e?: React.FormEvent) {
     if (e) e.preventDefault()
@@ -61,10 +68,14 @@ export function ProductsView() {
     setIsSaving(true)
 
     try {
-      await addManualProduct(trimmedName, pricePaise)
+      const result = await addManualProduct(trimmedName, pricePaise)
       refreshProducts()
-      addToast('success', `"${trimmedName}" added at ₹${parsedPrice}`)
-      setJustAddedKey(trimmedName.toLowerCase().replace(/[^a-z0-9]/g, ''))
+      if (result.merged) {
+        addToast('info', `"${result.displayName}" already exists — duplicates were merged`)
+      } else {
+        addToast('success', `"${result.displayName}" added at ₹${parsedPrice}`)
+      }
+      setJustAddedKey(normalizeProductKey(result.displayName))
       setProductName('')
       setPriceInput('')
       nameInputRef.current?.focus()

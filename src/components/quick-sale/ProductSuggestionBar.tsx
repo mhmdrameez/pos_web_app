@@ -8,7 +8,7 @@ import { productSuggestionEngine } from '../../services/suggestion/engine'
 import { formatDisplayName, normalizeProductKey } from '../../services/suggestion/productName'
 import type { RankedSuggestion } from '../../types/suggestion'
 import { Button } from '../ui/Button'
-import { Modal } from '../ui/Modal'
+import { ProductNameModal, ProductNamePicker } from './ProductNamePicker'
 
 function manualSuggestion(name: string): RankedSuggestion {
   return {
@@ -23,6 +23,8 @@ function manualSuggestion(name: string): RankedSuggestion {
 
 export function ProductSuggestionBar() {
   const currentAmount = useCartStore((s) => s.currentAmount)
+  const editingSale = useCartStore((s) => s.editingSale)
+  const addItem = useCartStore((s) => s.addItem)
   const showSuggestions = usePrinterStore((s) => s.showSuggestions)
   const best = useSuggestionUiStore((s) => s.best)
   const alternatives = useSuggestionUiStore((s) => s.alternatives)
@@ -33,10 +35,12 @@ export function ProductSuggestionBar() {
   const dismiss = useSuggestionUiStore((s) => s.dismiss)
   const pickAlternative = useSuggestionUiStore((s) => s.pickAlternative)
   const setChangeOpen = useSuggestionUiStore((s) => s.setChangeOpen)
+  const [editQuery, setEditQuery] = useState('')
 
   const entry = parseAmountAndQuantity(currentAmount)
+  const isEditingBill = Boolean(editingSale)
 
-  function applyManualName(name: string) {
+  function learnName(name: string) {
     if (!entry) return
     productSuggestionEngine.learn({
       displayName: name,
@@ -46,16 +50,29 @@ export function ProductSuggestionBar() {
       weight: 3,
       source: 'manual',
     })
+  }
+
+  function applyManualName(name: string) {
+    if (!entry) return
+    learnName(name)
     pickAlternative(manualSuggestion(name))
     setChangeOpen(false)
   }
 
-  const show = Boolean(showSuggestions !== false && entry && best && !dismissed)
+  function pickForEdit(name: string) {
+    if (!entry) return
+    learnName(name)
+    addItem(name, 'manual')
+    useSuggestionUiStore.getState().reset()
+    setEditQuery('')
+  }
+
+  const showRanked = Boolean(!isEditingBill && showSuggestions !== false && entry && best && !dismissed)
 
   return (
     <>
       <div className="mb-2 min-h-12">
-        {show && best && entry ? (
+        {showRanked && best && entry ? (
           <div className="flex items-center gap-2 min-h-12 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5">
             <Lightbulb className="w-4 h-4 text-indigo-600 shrink-0" />
             <p className="text-sm font-semibold text-indigo-950 truncate min-w-0">
@@ -100,60 +117,37 @@ export function ProductSuggestionBar() {
             </div>
           </div>
         ) : null}
-      </div>
 
-      <ChangeProductModal open={changeOpen} onClose={() => setChangeOpen(false)} onPick={applyManualName} />
-    </>
-  )
-}
-
-function ChangeProductModal({
-  open,
-  onClose,
-  onPick,
-}: {
-  open: boolean
-  onClose: () => void
-  onPick: (name: string) => void
-}) {
-  const [name, setName] = useState('')
-  const known = productSuggestionEngine.getKnownProducts()
-  const filtered = name.trim()
-    ? known.filter((item) => item.displayName.toLowerCase().includes(name.trim().toLowerCase()))
-    : known
-
-  return (
-    <Modal open={open} onClose={onClose} title="Change Product" size="sm">
-      <div className="space-y-3">
-        <input
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder="Product or cloth name"
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-        />
-        {filtered.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
-            {filtered.map((item) => (
+        {isEditingBill && entry ? (
+          <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2.5">
+            <p className="text-xs font-semibold text-indigo-900 mb-2">
+              Select a product or add a new name
+            </p>
+            {best && !dismissed ? (
               <button
-                key={item.productKey}
                 type="button"
-                onClick={() => onPick(item.displayName)}
-                className="text-xs px-2 py-1 rounded-lg bg-gray-100 hover:bg-gray-200"
+                onClick={() => pickForEdit(best.displayName)}
+                className="mb-2 w-full text-left text-sm px-3 py-1.5 rounded-lg bg-white border border-indigo-200 text-indigo-900 font-medium hover:bg-indigo-100"
               >
-                {item.displayName}
+                Suggested: {best.displayName}
               </button>
-            ))}
+            ) : null}
+            <ProductNamePicker
+              query={editQuery}
+              onQueryChange={setEditQuery}
+              onPick={pickForEdit}
+              compact
+            />
           </div>
-        )}
-        <div className="flex justify-end gap-2">
-          <Button variant="secondary" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="primary" size="sm" disabled={!name.trim()} onClick={() => onPick(name.trim())}>
-            Use This Name
-          </Button>
-        </div>
+        ) : null}
       </div>
-    </Modal>
+
+      <ProductNameModal
+        open={changeOpen}
+        onClose={() => setChangeOpen(false)}
+        onPick={applyManualName}
+        title="Change Product"
+      />
+    </>
   )
 }

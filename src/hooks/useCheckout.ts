@@ -173,7 +173,12 @@ export function useCheckout() {
 
       clearCart()
       closeCheckoutModal()
-      
+
+      // After each billed sale, turn off the main-page Suggestions toggle if it was on.
+      if (usePrinterStore.getState().showSuggestions) {
+        usePrinterStore.getState().setShowSuggestions(false)
+      }
+
       const successMsg = editingSale ? `Bill updated — ${sale.invoiceNumber}` : `Sale completed — ${sale.invoiceNumber}`
       if (issuedCouponCode) {
           addToast('success', `${successMsg} (Issued Coupon: ${issuedCouponCode})`)

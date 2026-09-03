@@ -59,6 +59,37 @@ function emptyStat(productKey: string, displayName: string, soldAt: number): Pro
   }
 }
 
+function preferDisplayName(current: string, incoming: string): string {
+  const a = formatDisplayName(current)
+  const b = formatDisplayName(incoming)
+  if (b.length > a.length) return b
+  return a
+}
+
+function mergeProductStats(into: ProductStat, from: ProductStat): ProductStat {
+  let buckets = [...into.priceBuckets]
+  for (const bucket of from.priceBuckets) {
+    buckets = mergePriceBucket(buckets, bucket.paise, bucket.count)
+  }
+  return {
+    productKey: into.productKey,
+    displayName: preferDisplayName(into.displayName, from.displayName),
+    totalCount: into.totalCount + from.totalCount,
+    confirmedCount: into.confirmedCount + from.confirmedCount,
+    rejectedCount: into.rejectedCount + from.rejectedCount,
+    minPricePaise: Math.min(into.minPricePaise, from.minPricePaise),
+    maxPricePaise: Math.max(into.maxPricePaise, from.maxPricePaise),
+    sumPricePaise: into.sumPricePaise + from.sumPricePaise,
+    sumPriceSq: into.sumPriceSq + from.sumPriceSq,
+    integerQtyCount: into.integerQtyCount + from.integerQtyCount,
+    decimalQtyCount: into.decimalQtyCount + from.decimalQtyCount,
+    lastSoldAt: Math.max(into.lastSoldAt, from.lastSoldAt),
+    recencyMass: into.recencyMass + from.recencyMass,
+    observationCount: (into.observationCount ?? 0) + (from.observationCount ?? 0),
+    priceBuckets: buckets,
+  }
+}
+
 export class ProductSuggestionEngine {
   private stats = new Map<string, ProductStat>()
   private pairs = new Map<string, ProductPairStat>()
@@ -82,15 +113,51 @@ export class ProductSuggestionEngine {
 
   load(stats: ProductStat[], pairs: ProductPairStat[]): void {
     this.reset()
+    const originalKeys = new Set(stats.map((stat) => stat.productKey))
+
     for (const stat of stats) {
-      this.stats.set(stat.productKey, {
+      const key = normalizeProductKey(stat.productKey) || normalizeProductKey(stat.displayName)
+      if (!key) continue
+      const canonical: ProductStat = {
         ...stat,
+        productKey: key,
+        displayName: formatDisplayName(stat.displayName),
         observationCount: stat.observationCount ?? Math.max(1, Math.round(stat.totalCount)),
         priceBuckets: [...stat.priceBuckets],
-      })
-      this._addToPriceIndex(stat)
+      }
+      const existing = this.stats.get(key)
+      this.stats.set(key, existing ? mergeProductStats(existing, canonical) : canonical)
     }
-    for (const pair of pairs) this.pairs.set(pair.id, { ...pair })
+
+    this.priceIndex.clear()
+    for (const stat of this.stats.values()) this._addToPriceIndex(stat)
+
+    const canonicalKeys = new Set(this.stats.keys())
+    const remapped =
+      stats.length !== this.stats.size || [...originalKeys].some((key) => !canonicalKeys.has(key))
+    if (remapped) {
+      for (const key of canonicalKeys) this.dirtyStats.add(key)
+      for (const key of originalKeys) {
+        if (!canonicalKeys.has(key)) this.dirtyStats.add(key)
+      }
+    }
+
+    for (const pair of pairs) {
+      const [left, right] = pair.id.split('|')
+      if (!left || !right) continue
+      const id = pairId(normalizeProductKey(left), normalizeProductKey(right))
+      const [a, b] = id.split('|')
+      if (!a || !b || a === b) continue
+      const existing = this.pairs.get(id)
+      if (existing) {
+        existing.count += pair.count
+        existing.lastSeenAt = Math.max(existing.lastSeenAt, pair.lastSeenAt)
+        this.pairs.set(id, existing)
+      } else {
+        this.pairs.set(id, { id, count: pair.count, lastSeenAt: pair.lastSeenAt })
+      }
+      if (remapped || pair.id !== id) this.dirtyPairs.add(id)
+    }
   }
 
   snapshot(): { stats: ProductStat[]; pairs: ProductPairStat[] } {
@@ -128,17 +195,31 @@ export class ProductSuggestionEngine {
   }
 
   getKnownProducts(): { productKey: string; displayName: string }[] {
-    return [...this.stats.values()]
-      .filter((stat) => stat.totalCount > 0)
-      .sort((a, b) => b.lastSoldAt - a.lastSoldAt)
-      .map((stat) => ({ productKey: stat.productKey, displayName: stat.displayName }))
+    const seen = new Set<string>()
+    const products: { productKey: string; displayName: string }[] = []
+    for (const stat of [...this.stats.values()]
+      .filter((item) => item.totalCount > 0)
+      .sort((a, b) => b.lastSoldAt - a.lastSoldAt)) {
+      const key = normalizeProductKey(stat.displayName) || stat.productKey
+      if (seen.has(key)) continue
+      seen.add(key)
+      products.push({ productKey: stat.productKey, displayName: stat.displayName })
+    }
+    return products
   }
 
   getAllProductStats(): ProductStat[] {
-    return [...this.stats.values()]
-      .filter((stat) => stat.totalCount > 0)
-      .sort((a, b) => b.lastSoldAt - a.lastSoldAt)
-      .map((stat) => ({ ...stat, priceBuckets: [...stat.priceBuckets] }))
+    const seen = new Set<string>()
+    const stats: ProductStat[] = []
+    for (const stat of [...this.stats.values()]
+      .filter((item) => item.totalCount > 0)
+      .sort((a, b) => b.lastSoldAt - a.lastSoldAt)) {
+      const key = normalizeProductKey(stat.displayName) || stat.productKey
+      if (seen.has(key)) continue
+      seen.add(key)
+      stats.push({ ...stat, priceBuckets: [...stat.priceBuckets] })
+    }
+    return stats
   }
 
   removeProduct(productKey: string): void {
@@ -170,7 +251,7 @@ export class ProductSuggestionEngine {
     const current = this.stats.get(key) ?? emptyStat(key, displayName, observation.soldAt)
     const weight = Math.max(0.25, observation.weight)
 
-    current.displayName = displayName
+    current.displayName = preferDisplayName(current.displayName, displayName)
     current.totalCount += weight
     if (observation.source === 'manual' || observation.source === 'suggested') {
       current.confirmedCount += observation.source === 'manual' ? weight : weight * 0.5

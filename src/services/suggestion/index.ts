@@ -98,7 +98,12 @@ export async function ensureProductSuggestionIndex(): Promise<void> {
   if (meta?.fingerprint === fingerprint) {
     const stored = await loadSuggestionIndex()
     productSuggestionEngine.load(stored.stats, stored.pairs)
-    if (stored.stats.length > 0 || fingerprint === '0:0') return
+    if (productSuggestionEngine.hasDirty()) {
+      const snapshot = productSuggestionEngine.snapshot()
+      await saveSuggestionIndex(snapshot.stats, snapshot.pairs, fingerprint)
+      productSuggestionEngine.clearDirty()
+    }
+    if (productSuggestionEngine.getAllProductStats().length > 0 || fingerprint === '0:0') return
   }
   await rebuildProductSuggestionIndex()
 }
@@ -127,7 +132,18 @@ export function cartProductKeys(items: CartItem[]): string[] {
     .map((name) => normalizeProductKey(name))
 }
 
-export async function addManualProduct(displayName: string, unitPricePaise: number, quantity = 1): Promise<void> {
+export function findProductByName(displayName: string) {
+  const key = normalizeProductKey(displayName)
+  if (!key) return undefined
+  return productSuggestionEngine.getAllProductStats().find((stat) => stat.productKey === key)
+}
+
+export async function addManualProduct(
+  displayName: string,
+  unitPricePaise: number,
+  quantity = 1,
+): Promise<{ merged: boolean; displayName: string }> {
+  const existing = findProductByName(displayName)
   productSuggestionEngine.learn({
     displayName,
     unitPricePaise,
@@ -137,6 +153,8 @@ export async function addManualProduct(displayName: string, unitPricePaise: numb
     source: 'manual',
   })
   await persistSuggestionSnapshot()
+  const saved = findProductByName(displayName)
+  return { merged: Boolean(existing), displayName: saved?.displayName ?? displayName }
 }
 
 export async function removeManualProduct(productKey: string): Promise<void> {
@@ -146,6 +164,21 @@ export async function removeManualProduct(productKey: string): Promise<void> {
 
 export function getKnownProductStats() {
   return productSuggestionEngine.getAllProductStats()
+}
+
+/** Merge catalog rows that only differ by case, spacing, or punctuation, then persist. */
+export async function mergeDuplicateProducts(): Promise<number> {
+  const before = productSuggestionEngine.snapshot().stats.length
+  const snapshot = productSuggestionEngine.snapshot()
+  productSuggestionEngine.load(snapshot.stats, snapshot.pairs)
+  const after = productSuggestionEngine.snapshot().stats.length
+  if (productSuggestionEngine.hasDirty()) {
+    const fingerprint = await computeSalesFingerprintFast()
+    const next = productSuggestionEngine.snapshot()
+    await saveSuggestionIndex(next.stats, next.pairs, fingerprint)
+    productSuggestionEngine.clearDirty()
+  }
+  return Math.max(0, before - after)
 }
 
 
