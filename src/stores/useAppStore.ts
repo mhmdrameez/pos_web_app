@@ -2,6 +2,25 @@ import { create } from 'zustand'
 import type { BottomTab, SidebarView, ToastMessage } from '../types'
 import { generateId } from '../utils/id'
 
+// ── Persistent UI prefs (survive page reload) ────────────────────────────────
+const PREFS_KEY = 'quick-sale-pos:ui-prefs'
+function loadPref<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY)
+    if (!raw) return fallback
+    const obj = JSON.parse(raw) as Record<string, unknown>
+    return key in obj ? (obj[key] as T) : fallback
+  } catch { return fallback }
+}
+function savePref(key: string, value: unknown) {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY)
+    const obj: Record<string, unknown> = raw ? (JSON.parse(raw) as Record<string, unknown>) : {}
+    obj[key] = value
+    localStorage.setItem(PREFS_KEY, JSON.stringify(obj))
+  } catch { /* ignore */ }
+}
+
 interface AppState {
   activeSidebarView: SidebarView
   activeBottomTab: BottomTab
@@ -19,6 +38,8 @@ interface AppState {
   toasts: ToastMessage[]
   isDbReady: boolean
   businessName: string
+  showNetworkLED: boolean
+  forceOffline: boolean
 
   setActiveSidebarView: (view: SidebarView) => void
   setActiveBottomTab: (tab: BottomTab) => void
@@ -38,6 +59,8 @@ interface AppState {
   removeToast: (id: string) => void
   setDbReady: (ready: boolean) => void
   setBusinessName: (name: string) => void
+  setShowNetworkLED: (show: boolean) => void
+  setForceOffline: (offline: boolean) => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -57,6 +80,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   toasts: [],
   isDbReady: false,
   businessName: 'My Business',
+  showNetworkLED: loadPref('showNetworkLED', true),
+  forceOffline: loadPref('forceOffline', false),
 
   setActiveSidebarView: (view) => {
     set({
@@ -100,4 +125,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setDbReady: (ready) => set({ isDbReady: ready }),
   setBusinessName: (name) => set({ businessName: name }),
+
+  setShowNetworkLED: (show) => {
+    savePref('showNetworkLED', show)
+    set({ showNetworkLED: show })
+  },
+
+  setForceOffline: (offline) => {
+    savePref('forceOffline', offline)
+    set({ forceOffline: offline })
+  },
 }))

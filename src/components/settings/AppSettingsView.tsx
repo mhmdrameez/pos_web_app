@@ -13,6 +13,8 @@ import {
   Cloud,
   RefreshCw,
   Database,
+  Activity,
+  WifiOff,
 } from 'lucide-react'
 import { useAppStore } from '../../stores/useAppStore'
 import { Button } from '../ui/Button'
@@ -38,6 +40,10 @@ interface FormState {
 
 export function AppSettingsView() {
   const addToast = useAppStore((s) => s.addToast)
+  const showNetworkLED = useAppStore((s) => s.showNetworkLED)
+  const setShowNetworkLED = useAppStore((s) => s.setShowNetworkLED)
+  const forceOffline = useAppStore((s) => s.forceOffline)
+  const setForceOffline = useAppStore((s) => s.setForceOffline)
 
   const [form, setForm] = useState<FormState>({
     resendApiKey: '',
@@ -669,6 +675,69 @@ export function AppSettingsView() {
                   <RefreshCw className="w-4 h-4" />
                 )}
                 {isManualSyncing || syncStatus.isSyncing ? 'Syncing...' : 'Sync All Sales Now'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* UI Preferences */}
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <Activity className="w-4 h-4 text-indigo-500" />
+            <h3 className="text-sm font-semibold text-gray-800 uppercase tracking-wide">
+              UI Preferences
+            </h3>
+          </div>
+
+          <div className="space-y-4 bg-gray-50 rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-700">Show Network LED</p>
+                <p className="text-xs text-gray-400">
+                  Displays a real-time network activity monitor in the sidebar.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={showNetworkLED}
+                onClick={() => setShowNetworkLED(!showNetworkLED)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  showNetworkLED ? 'bg-indigo-500' : 'bg-gray-300'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    showNetworkLED ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+            
+            <div className="flex items-center justify-between border-t border-gray-200 pt-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-gray-700">Force Offline Mode</p>
+                  <WifiOff className="w-4 h-4 text-gray-400" />
+                </div>
+                <p className="text-xs text-gray-400">
+                  Simulates offline state in the UI for testing purposes.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={forceOffline}
+                onClick={() => setForceOffline(!forceOffline)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  forceOffline ? 'bg-amber-500' : 'bg-gray-300'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    forceOffline ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
               </button>
             </div>
           </div>
